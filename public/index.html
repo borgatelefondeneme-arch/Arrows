@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Ok Küp</title>
+  <meta name="description" content="Küpün üzerindeki okları temizle, kafesteki tatlı karakteri kurtar!">
+  <meta name="theme-color" content="#6c5ce7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ok Küp">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <!-- Ana menü -->
+    <section id="screen-home" class="screen active">
+      <div class="home-top">
+        <div class="logo">
+          <div class="logo-cube">➜</div>
+          <h1>Ok Küp</h1>
+          <p class="tagline">Okları temizle, minik dostu kurtar!</p>
+        </div>
+        <div class="stats-row">
+          <div class="stat"><span id="home-level">1</span><small>Bölüm</small></div>
+          <div class="stat"><span id="home-stars">0</span><small>Yıldız ⭐</small></div>
+          <div class="stat"><span id="home-score">0</span><small>Puan</small></div>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="btn big primary" id="btn-play">▶ Oyna</button>
+        <button class="btn big" id="btn-levels">🗺️ Bölümler</button>
+        <button class="btn big vs" id="btn-friends">⚔️ Arkadaşlar &amp; VS</button>
+        <button class="btn small ghost" id="btn-howto">❓ Nasıl oynanır?</button>
+      </div>
+      <div class="conn" id="conn-status"><span class="dot"></span><span class="txt">Bağlanıyor…</span></div>
+    </section>
+
+    <!-- Bölüm seçimi -->
+    <section id="screen-levels" class="screen">
+      <header class="bar">
+        <button class="icon-btn" data-back>‹</button>
+        <h2>Bölümler</h2>
+        <span></span>
+      </header>
+      <div id="level-grid" class="level-grid"></div>
+    </section>
+
+    <!-- Arkadaşlar -->
+    <section id="screen-friends" class="screen">
+      <header class="bar">
+        <button class="icon-btn" data-back>‹</button>
+        <h2>Arkadaşlar &amp; VS</h2>
+        <span></span>
+      </header>
+      <div class="scroll">
+        <div class="card me-card">
+          <label class="lbl">Adın</label>
+          <div class="row">
+            <input id="my-name" maxlength="20" placeholder="Adını yaz" autocomplete="off">
+            <button class="btn small" id="btn-save-name">Kaydet</button>
+          </div>
+          <label class="lbl">Arkadaş kodun</label>
+          <div class="row">
+            <div class="code" id="my-code">——————</div>
+            <button class="btn small" id="btn-share-code">Paylaş</button>
+          </div>
+          <div class="muted" id="my-record"></div>
+        </div>
+        <div class="card">
+          <label class="lbl">Arkadaş ekle</label>
+          <div class="row">
+            <input id="friend-code" maxlength="6" placeholder="KOD" autocapitalize="characters" autocomplete="off">
+            <button class="btn small primary" id="btn-add-friend">Ekle</button>
+          </div>
+        </div>
+        <h3 class="section-title">Arkadaşların</h3>
+        <div id="friend-list" class="friend-list"></div>
+        <p class="muted center" id="friends-offline-note" hidden>VS için sunucuya bağlı olmalısın.</p>
+      </div>
+    </section>
+
+    <!-- Oyun -->
+    <section id="screen-game" class="screen">
+      <div id="stage"></div>
+      <div class="hud top">
+        <button class="icon-btn" id="btn-quit">✕</button>
+        <div class="hud-center">
+          <div class="hud-level" id="hud-level">Bölüm 1</div>
+          <div class="hud-timer" id="hud-timer">0:00.0</div>
+        </div>
+        <div class="hud-arrows"><span id="hud-remaining">0</span><small>ok</small></div>
+      </div>
+      <div class="vs-bar" id="vs-bar" hidden>
+        <div class="vs-row"><span class="vs-name">Sen</span><div class="progress"><div id="vs-me" class="fill me"></div></div></div>
+        <div class="vs-row"><span class="vs-name" id="vs-opp-name">Rakip</span><div class="progress"><div id="vs-opp" class="fill opp"></div></div></div>
+      </div>
+      <div class="hud bottom">
+        <button class="icon-btn" id="btn-zoom-out" aria-label="Uzaklaştır">－</button>
+        <button class="icon-btn" id="btn-reset-view" aria-label="Görünümü sıfırla">⟲</button>
+        <button class="icon-btn" id="btn-hint" aria-label="İpucu">💡</button>
+        <button class="icon-btn" id="btn-zoom-in" aria-label="Yakınlaştır">＋</button>
+      </div>
+      <div class="stun" id="stun" hidden>💥 Çarptı!</div>
+      <div class="countdown" id="countdown" hidden></div>
+    </section>
+  </div>
+
+  <!-- Modallar -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
