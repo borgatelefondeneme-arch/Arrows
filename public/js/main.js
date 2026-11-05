@@ -88,7 +88,7 @@ function renderLevels() {
     const best = store.best[lv];
     html += `<button class="level ${locked ? 'locked' : ''} ${lv === store.maxLevel ? 'current' : ''}" data-level="${lv}" ${locked ? 'disabled' : ''}>
       <span class="num">${locked ? '🔒' : lv}</span>
-      <span class="name">${esc(cfg.name)}<br>${cfg.dims.join('×')}</span>
+      <span class="name">${cfg.goal === 'rescue' ? '🐥' : '🧹'} ${esc(cfg.name)}<br>${cfg.dims.join('×')}</span>
       <span class="stars">${best ? '⭐'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆'}</span>
     </button>`;
   }
@@ -142,10 +142,10 @@ $('#btn-howto').addEventListener('click', showHowTo);
 function showHowTo() {
   showModal(`<div class="big-emoji">🧊➜🐥</div><h2>Nasıl oynanır?</h2>
     <ul class="howto">
-      <li>Bir bloğa <b>dokun</b>: blok sadece <b>okunun gösterdiği yöne</b> uçar.</li>
-      <li>Yolunda başka blok varsa <b>çarpar</b> ve geri döner — oklar birbirinin içinden geçemez. Çarpınca kısa süre sersemlersin!</li>
-      <li>⦿ işareti ok sana doğru bakıyor, ⊗ işareti okun kuyruğu demek.</li>
-      <li>Tüm okları temizle, ortadaki <b>kafesin kilidi</b> açılsın ve tatlı dostun kurtulsun.</li>
+      <li>Küpün yüzeyindeki bir <b>oka dokun</b>: ok sadece <b>ucunun gösterdiği yöne</b> kayar, gövdesi yolunu izler ve küpten çıkar.</li>
+      <li>Ucunun önünde başka bir ok varsa <b>çarpar</b> ve geri döner — oklar birbirinin içinden geçemez. Çarpınca kısa süre sersemlersin!</li>
+      <li>🐥 bölümlerde <b>kırmızı kilit okunu</b> çıkar: asma kilit açılır ve tatlı dostun kurtulur.</li>
+      <li>🧹 bölümlerde <b>tüm okları temizle</b>, kafes açılsın.</li>
       <li>Ne kadar hızlı bitirirsen o kadar çok <b>puan</b> ve ⭐ alırsın. 💡 ipucu +5 sn ekler.</li>
       <li>Bir parmakla <b>döndür</b>, iki parmakla <b>büyüt/küçült</b> (veya ＋ / － düğmeleri).</li>
       <li>⚔️ VS: arkadaşınla <b>ikinizin de açtığı ortak bir bölümde</b>, aynı bulmacada, aynı anda başlarsınız. Karakteri ilk kurtaran kazanır!</li>
@@ -237,7 +237,7 @@ function showIncomingInvite(msg) {
 
 // ---- Oyun -----------------------------------------------------------------
 function ensureScene() {
-  if (!scene) scene = new GameScene($('#stage'), { onTap });
+  if (!scene) scene = new GameScene($('#stage'), { onTap, arrowAt: (cell) => (game ? game.state.arrowAt(cell) : null) });
   return scene;
 }
 
@@ -257,7 +257,7 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     running: false, ended: false, bumps: 0, hints: 0, penaltyMs: 0,
     startTime: 0, stunUntil: 0, timerRaf: 0,
   };
-  $('#hud-level').textContent = `${mode === 'vs' ? '⚔️ ' : ''}Bölüm ${level} · ${puzzle.name}`;
+  $('#hud-level').textContent = `${mode === 'vs' ? '⚔️ ' : ''}Bölüm ${level} · ${puzzle.goal === 'rescue' ? '🐥 Kilidi aç!' : '🧹 Hepsini temizle!'}`;
   $('#hud-timer').textContent = fmtTime(0);
   $('#btn-hint').hidden = mode === 'vs';
   $('#vs-bar').hidden = mode !== 'vs';
@@ -272,6 +272,7 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     game.running = true;
     game.startTime = performance.now();
     tickTimer();
+    if (level <= 2 && mode === 'solo') showTutorial();
   });
 }
 
@@ -310,7 +311,7 @@ function updateHud() {
   if (!game) return;
   const { state } = game;
   $('#hud-remaining').textContent = state.remaining;
-  if (game.mode === 'vs') $('#vs-me').style.width = `${(100 * (state.total - state.remaining)) / state.total}%`;
+  if (game.mode === 'vs') $('#vs-me').style.width = `${100 * state.progress}%`;
 }
 
 function onTap(id) {
@@ -321,6 +322,7 @@ function onTap(id) {
   if (r.ok) {
     scene.animateRemove(id);
     sfx.whoosh();
+    hideTutorial();
   } else {
     scene.animateBump(id, r.steps, r.hit);
     sfx.bump();
@@ -329,7 +331,8 @@ function onTap(id) {
   }
   updateHud();
   if (game.mode === 'vs') {
-    net.send('progress', { matchId: game.match.matchId, remaining: game.state.remaining, total: game.state.total, bumps: game.bumps });
+    const total = game.state.required.size;
+    net.send('progress', { matchId: game.match.matchId, remaining: Math.round(total * (1 - game.state.progress)), total, bumps: game.bumps });
   }
   if (game.state.solved) finishGame();
 }
@@ -339,13 +342,16 @@ $('#btn-zoom-out').addEventListener('click', () => scene?.zoom(0.8));
 $('#btn-reset-view').addEventListener('click', () => scene?.resetView());
 $('#btn-hint').addEventListener('click', () => {
   if (!game?.running || game.mode !== 'solo') return;
-  const free = game.puzzle.blocks.filter((b) => !game.state.removed.has(b.id) && game.state.isFree(b.id));
+  const free = game.puzzle.arrows.filter((a) => game.state.isFree(a.id));
   if (!free.length) return;
-  const pick = free[Math.floor(Math.random() * free.length)];
+  // Önce kilide giden yoldaki oklardan birini göster.
+  const useful = free.filter((a) => game.state.required.has(a.id));
+  const pool = useful.length ? useful : free;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
   scene.hint(pick.id);
   game.hints++;
   game.penaltyMs += HINT_PENALTY_MS;
-  toast('💡 Parlayan blok serbest! (+5 sn)', 1600);
+  toast('💡 Yanıp sönen ok serbest! (+5 sn)', 1600);
 });
 
 $('#btn-quit').addEventListener('click', () => {
@@ -360,7 +366,39 @@ $('#btn-quit').addEventListener('click', () => {
   back();
 });
 
+// ---- Öğretici el (ilk bölümler) ----------------------------------------------
+let tutorial = null;
+function showTutorial() {
+  const g = game;
+  const el = $('#tutorial');
+  // Önce ucu ekranda görünen serbest bir ok seç.
+  const pickTarget = () => g.puzzle.arrows.find((a) => g.state.isFree(a.id) && (g.puzzle.goal === 'clear' || g.state.required.has(a.id)) && scene.screenPosOf(a.id))
+    || g.puzzle.arrows.find((a) => g.state.isFree(a.id) && scene.screenPosOf(a.id));
+  let target = pickTarget();
+  if (!target) return;
+  el.hidden = false;
+  tutorial = { el };
+  const loop = () => {
+    if (!tutorial || game !== g || !g.running) { hideTutorial(); return; }
+    if (g.state.removed.has(target.id)) target = pickTarget();
+    const p = target && scene.screenPosOf(target.id);
+    if (p) {
+      el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      el.style.opacity = '1';
+    } else el.style.opacity = '0';
+    tutorial.raf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function hideTutorial() {
+  if (!tutorial) return;
+  cancelAnimationFrame(tutorial.raf);
+  tutorial.el.hidden = true;
+  tutorial = null;
+}
+
 function stopGame() {
+  hideTutorial();
   if (!game) return;
   game.running = false;
   game.ended = true;
@@ -373,6 +411,7 @@ function finishGame() {
   const g = game;
   const time = elapsed();
   g.running = false;
+  hideTutorial();
   cancelAnimationFrame(g.timerRaf);
   $('#stun').hidden = true;
   $('#hud-timer').textContent = fmtTime(time);
@@ -498,7 +537,7 @@ net.on('matchEnd', (m) => {
   if (!game || game.mode !== 'vs' || game.match.matchId !== m.matchId) return;
   const g = game;
   const won = m.you === 'win';
-  const remainingMe = g.state.remaining;
+  const progressMe = g.state.progress;
   stopGame();
   if (!won && m.reason === 'forfeit') { me.losses++; return; } // maçtan kendin çıktın
   if (won) {
@@ -515,7 +554,7 @@ net.on('matchEnd', (m) => {
   } else if (won) {
     emoji = '🏆'; title = 'Kazandın!'; text = m.reason === 'forfeit' ? `${opp} maçtan çekildi.` : `${opp} bağlantısı koptu.`;
   } else if (m.reason === 'finished') {
-    emoji = '😿'; title = 'Kaybettin'; text = `${opp} karakteri ${fmtTime(m.timeMs)} sürede kurtardı. Senin ${remainingMe} okun kalmıştı.`;
+    emoji = '😿'; title = 'Kaybettin'; text = `${opp} karakteri ${fmtTime(m.timeMs)} sürede kurtardı. Kilide giden yolun %${Math.round(progressMe * 100)}'ini açmıştın.`;
   } else {
     emoji = '🏳️'; title = 'Maç bitti'; text = 'Maçtan ayrıldın.';
   }

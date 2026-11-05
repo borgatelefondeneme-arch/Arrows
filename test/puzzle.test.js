@@ -1,31 +1,72 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generatePuzzle, levelConfig, PuzzleState, scoreFor, HAND_LEVEL_COUNT } from '../public/js/puzzle.js';
+import {
+  generatePuzzle, levelConfig, PuzzleState, scoreFor, HAND_LEVEL_COUNT,
+  allCells, cellKey, step, rayCells, headOf, axisOf, opposite,
+} from '../public/js/puzzle.js';
 
-test('aynı bölüm + tohum her zaman aynı bulmacayı üretir (VS için şart)', () => {
-  const a = generatePuzzle(7, 12345);
-  const b = generatePuzzle(7, 12345);
-  assert.deepEqual(a, b);
-  assert.notDeepEqual(generatePuzzle(7, 1).blocks, generatePuzzle(7, 2).blocks);
+const LEVELS = Array.from({ length: HAND_LEVEL_COUNT + 12 }, (_, i) => i + 1);
+
+test('yüzeyde yürümek: 4 adımda aynı yüzde ya da kenarlardan dolaşarak geri dönülür', () => {
+  const dims = [3, 4, 5];
+  for (const cell of allCells(dims)) {
+    for (const d of [0, 1, 2, 3, 4, 5].filter((x) => axisOf(x) !== axisOf(cell.f))) {
+      // Bir adım git, ters yöne bir adım dön → başladığın hücre.
+      const a = step(dims, cell, d);
+      const back = step(dims, a.cell, opposite(a.t));
+      assert.equal(cellKey(back.cell), cellKey(cell));
+    }
+  }
+  assert.equal(allCells(dims).length, 2 * (3 * 4 + 4 * 5 + 3 * 5));
 });
 
-test('verilen çözüm sırası geçerli', () => {
-  for (let lv = 1; lv <= HAND_LEVEL_COUNT + 15; lv++) {
+test('aynı bölüm + tohum her zaman aynı bulmacayı üretir (VS için şart)', () => {
+  assert.deepEqual(generatePuzzle(7, 12345), generatePuzzle(7, 12345));
+  assert.notDeepEqual(generatePuzzle(7, 1).arrows, generatePuzzle(7, 2).arrows);
+});
+
+test('oklar geçerli: hücreler komşu, çakışma yok, uç düz geliyor, önünde kendi gövdesi yok', () => {
+  for (const lv of LEVELS) {
     const p = generatePuzzle(lv);
-    const s = new PuzzleState(p);
-    for (const id of p.solution) assert.ok(s.tryMove(id).ok, `bölüm ${lv}, blok ${id}`);
-    assert.ok(s.solved);
+    const seen = new Set();
+    for (const a of p.arrows) {
+      assert.ok(a.cells.length >= 2);
+      for (const c of a.cells) {
+        assert.ok(!seen.has(cellKey(c)), `bölüm ${lv}: hücre iki okta`);
+        seen.add(cellKey(c));
+      }
+      for (let i = 0; i + 1 < a.cells.length; i++) {
+        const ok = [0, 1, 2, 3, 4, 5].some((d) => axisOf(d) !== axisOf(a.cells[i].f)
+          && cellKey(step(p.dims, a.cells[i], d).cell) === cellKey(a.cells[i + 1]));
+        assert.ok(ok, `bölüm ${lv}: ok ${a.id} kopuk`);
+      }
+      const h = headOf(a);
+      const behind = step(p.dims, h, opposite(a.dir));
+      assert.equal(behind.edge, null);
+      assert.equal(cellKey(behind.cell), cellKey(a.cells[a.cells.length - 2]));
+      const own = new Set(a.cells.map(cellKey));
+      assert.ok(rayCells(p.dims, h, a.dir).every((c) => !own.has(cellKey(c))));
+    }
   }
 });
 
-test('bulmaca asla kilitlenmez: rastgele serbest blok seçerek hep bitirilir', () => {
-  for (let lv = 1; lv <= HAND_LEVEL_COUNT + 15; lv++) {
+test('verilen çözüm bölümü bitirir', () => {
+  for (const lv of LEVELS) {
+    const p = generatePuzzle(lv);
+    const s = new PuzzleState(p);
+    for (const id of p.solution) assert.ok(s.tryMove(id).ok, `bölüm ${lv}, ok ${id}`);
+    assert.ok(s.solved, `bölüm ${lv}`);
+  }
+});
+
+test('bulmaca asla kilitlenmez: rastgele serbest ok seçerek hep bitirilir', () => {
+  for (const lv of LEVELS) {
     for (const seed of [1, 99, 2024]) {
       const p = generatePuzzle(lv, seed);
       const s = new PuzzleState(p);
       let guard = 0;
       while (!s.solved) {
-        const free = p.blocks.filter((b) => !s.removed.has(b.id) && s.isFree(b.id));
+        const free = p.arrows.filter((a) => s.isFree(a.id));
         assert.ok(free.length > 0, `bölüm ${lv} tohum ${seed} kilitlendi`);
         s.tryMove(free[(guard * 7) % free.length].id);
         assert.ok(++guard < 10000);
@@ -34,28 +75,41 @@ test('bulmaca asla kilitlenmez: rastgele serbest blok seçerek hep bitirilir', (
   }
 });
 
+test('kurtarma bölümleri: kilit oku başta serbest değil, önce başka oklar çıkmalı', () => {
+  for (const lv of LEVELS) {
+    const p = generatePuzzle(lv);
+    if (p.goal !== 'rescue') continue;
+    const s = new PuzzleState(p);
+    assert.equal(p.arrows.filter((a) => a.lock).length, 1);
+    assert.ok(p.required.length >= 2, `bölüm ${lv}`);
+    const r = s.tryMove(p.lock);
+    assert.equal(r.ok, false, `bölüm ${lv}: kilit oku hemen çıkmamalı`);
+    assert.ok(p.required.includes(r.hit));
+  }
+});
+
 test('engelli ok çarpar ve yerinde kalır', () => {
   const p = generatePuzzle(10);
   const s = new PuzzleState(p);
-  const blocked = p.blocks.find((b) => !s.isFree(b.id));
-  assert.ok(blocked, 'zor bölümde engelli ok olmalı');
+  const blocked = p.arrows.find((a) => !s.isFree(a.id));
   const r = s.tryMove(blocked.id);
   assert.equal(r.ok, false);
-  assert.equal(s.remaining, p.blocks.length);
+  assert.ok(r.steps >= 0);
+  assert.equal(s.remaining, p.arrows.length);
 });
 
-test('bölümler zorlaşır ve şekiller çeşitlenir', () => {
-  const sizes = [1, 5, 10, 15, 20].map((l) => generatePuzzle(l).blocks.length);
-  assert.ok(sizes[0] < sizes[2] && sizes[2] < sizes[4], sizes.join(','));
-  const shapes = new Set(Array.from({ length: 30 }, (_, i) => levelConfig(i + 1).shape));
-  assert.ok(shapes.size >= 5);
-  assert.ok(levelConfig(25).dims);
+test('bölümler büyür ve zorlaşır, küp dışında prizmalar da var', () => {
+  const req = [2, 7, 13, 20].map((l) => generatePuzzle(l).required.length);
+  assert.ok(req[0] < req[3], req.join(','));
+  const nonCube = LEVELS.map(levelConfig).filter((c) => new Set(c.dims).size > 1);
+  assert.ok(nonCube.length >= 5);
+  assert.ok(LEVELS.map(levelConfig).some((c) => c.goal === 'clear'));
 });
 
 test('puan: hızlı bitiren daha çok puan ve yıldız alır', () => {
   const p = generatePuzzle(3);
-  const fast = scoreFor(p, 5000, 0);
-  const slow = scoreFor(p, 200000, 3);
+  const fast = scoreFor(p, 3000, 0);
+  const slow = scoreFor(p, 400000, 3);
   assert.ok(fast.score > slow.score);
   assert.equal(fast.stars, 3);
   assert.equal(slow.stars, 1);
