@@ -6,7 +6,8 @@
 // - Bir oka dokununca ok, UCUNUN gösterdiği yöne doğru kayar; gövdesi kendi yolunu izler.
 //   Ucun önündeki yol (yüzün kenarına kadar) boşsa ok kenardan uçup gider.
 // - Yolda başka bir ok varsa çarpar ve geri döner: oklar birbirinin içinden geçemez.
-// - 'rescue' bölümlerinde kırmızı KİLİT OKU tatlı karakteri tutar; o ok çıkınca karakter kurtulur.
+// - 'rescue' bölümlerinde tatlı karakter yüzeyin EN ZOR noktasında, okların arasında kafestedir.
+//   Etrafındaki 8 hücreyi kaplayan oklar temizlenince kurtulur.
 //   'clear' bölümlerinde tüm oklar temizlenince kafes açılır.
 //
 // Üretim: oklar sırayla eklenir; her yeni okun önü (eklendiği anda) boştur. Böylece ekleme
@@ -234,36 +235,53 @@ function tryGenerate(cfg, seed) {
   }
   if (arrows.length < 2) return null;
 
-  // Engel grafiği: okun önünde hangi oklar var? (hep daha sonra eklenmiş oklar → döngü yok)
-  const blockers = arrows.map((a) => {
-    const s = new Set();
-    for (const c of rayCells(dims, headOf(a), a.dir)) {
-      const o = occupied.get(cellKey(c));
-      if (o !== undefined) s.add(o);
-    }
-    return [...s];
-  });
-  const closure = new Array(arrows.length);
-  for (let i = arrows.length - 1; i >= 0; i--) {
-    const s = new Set();
-    for (const b of blockers[i]) { s.add(b); for (const x of closure[b]) s.add(x); }
-    closure[i] = s;
-  }
-
-  let lock = null;
+  const fill = occupied.size / cells.length;
+  const base = closures(dims, arrows, occupied);
+  let trap = [];
+  let character = null;
+  let list = arrows;
   let required;
+
   if (cfg.goal === 'rescue') {
-    lock = 0;
-    for (let i = 1; i < arrows.length; i++) if (closure[i].size > closure[lock].size) lock = i;
-    required = [lock, ...closure[lock]];
+    // Karakteri EN ZOR noktaya koy: etrafını saran okları çıkarmak için önce en çok okun
+    // temizlenmesi gereken hücre. O hücredeki ok kaldırılır, karakter onun yerine oturur.
+    let best = null;
+    for (const X of arrows) {
+      for (const c of X.cells) {
+        const ringArrows = new Set();
+        for (const n of neighbors8(dims, c)) {
+          const o = occupied.get(cellKey(n));
+          if (o !== undefined && o !== X.id) ringArrows.add(o);
+        }
+        if (ringArrows.size < 3) continue;
+        const need = new Set();
+        for (const r of ringArrows) { need.add(r); for (const x of base[r]) need.add(x); }
+        need.delete(X.id);
+        const score = need.size + ringArrows.size * 0.3 - X.cells.length * 0.2 + rnd() * 0.1;
+        if (!best || score > best.score) best = { score, X, c };
+      }
+    }
+    if (!best) return null;
+    // X'i çıkar ve okları yeniden numarala (ekleme sırası korunur → çözülebilirlik bozulmaz).
+    list = arrows.filter((a) => a !== best.X).map((a, i) => ({ ...a, id: i }));
+    const occ = new Map();
+    for (const a of list) for (const c of a.cells) occ.set(cellKey(c), a.id);
+    const cl = closures(dims, list, occ);
+    const ring = neighbors8(dims, best.c);
+    const t = new Set();
+    for (const n of ring) { const o = occ.get(cellKey(n)); if (o !== undefined) t.add(o); }
+    trap = [...t].sort((a, b) => a - b);
+    const req = new Set();
+    for (const r of trap) { req.add(r); for (const x of cl[r]) req.add(x); }
+    required = [...req];
+    character = { cell: best.c, ring };
   } else {
     required = arrows.map((a) => a.id);
   }
 
   // Çözüm: ekleme sırasının tersi (sadece gerekli oklar).
   const req = new Set(required);
-  const solution = arrows.map((a) => a.id).reverse().filter((id) => req.has(id));
-  const fill = occupied.size / cells.length;
+  const solution = list.map((a) => a.id).reverse().filter((id) => req.has(id));
 
   return {
     level: cfg.level ?? 0,
@@ -271,13 +289,47 @@ function tryGenerate(cfg, seed) {
     goal: cfg.goal ?? 'rescue',
     dims: dims.slice(),
     seed,
-    arrows: arrows.map((a) => ({ ...a, lock: a.id === lock })),
-    lock,
+    arrows: list,
+    character,
+    trap,
     required: required.sort((a, b) => a - b),
     solution,
     fill,
-    quality: fill + (cfg.goal === 'rescue' ? required.length / arrows.length : 0),
+    quality: fill + (cfg.goal === 'rescue' ? required.length / list.length : 0),
   };
+}
+
+// Her ok için: onu serbest bırakmak için önce çıkması gereken tüm oklar (geçişli).
+// Engeller hep daha sonra eklenmiş oklardır, bu yüzden sondan başa tek geçiş yeter.
+function closures(dims, list, occupied) {
+  const out = new Array(list.length);
+  for (let i = list.length - 1; i >= 0; i--) {
+    const s = new Set();
+    for (const c of rayCells(dims, headOf(list[i]), list[i].dir)) {
+      const o = occupied.get(cellKey(c));
+      if (o === undefined) continue;
+      s.add(o);
+      for (const x of out[o]) s.add(x);
+    }
+    out[i] = s;
+  }
+  return out;
+}
+
+// Bir hücrenin yüzey üzerindeki 8 komşusu (kenar/köşelerden komşu yüzlere taşabilir).
+export function neighbors8(dims, cell) {
+  const out = new Map();
+  for (const d of tangentDirs(cell.f)) {
+    const s1 = step(dims, cell, d);
+    out.set(cellKey(s1.cell), s1.cell);
+    for (const e of tangentDirs(cell.f)) {
+      if (axisOf(e) === axisOf(d) || axisOf(e) === axisOf(s1.cell.f)) continue;
+      const s2 = step(dims, s1.cell, e);
+      out.set(cellKey(s2.cell), s2.cell);
+    }
+  }
+  out.delete(cellKey(cell));
+  return [...out.values()];
 }
 
 // ---- Oyun durumu --------------------------------------------------------------
@@ -288,12 +340,20 @@ export class PuzzleState {
     for (const a of puzzle.arrows) for (const c of a.cells) this.occupied.set(cellKey(c), a.id);
     this.removed = new Set();
     this.required = new Set(puzzle.required);
+    this.trap = new Set(puzzle.trap || []);
   }
 
   get total() { return this.puzzle.arrows.length; }
   get remaining() { return this.total - this.removed.size; }
   get solved() {
-    return this.puzzle.goal === 'rescue' ? this.removed.has(this.puzzle.lock) : this.removed.size === this.total;
+    return this.puzzle.goal === 'rescue' ? this.trapLeft === 0 : this.removed.size === this.total;
+  }
+
+  // Karakterin etrafında kalan (onu hapseden) ok sayısı
+  get trapLeft() {
+    let n = 0;
+    for (const id of this.trap) if (!this.removed.has(id)) n++;
+    return n;
   }
 
   // 0..1 ilerleme (VS çubuğu için): gerekli oklardan kaçı çıktı

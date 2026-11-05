@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:offline": "node scripts/build-offline.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -17,5 +18,8 @@
     "express": "^5.1.0",
     "three": "^0.180.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10"
   }
 }

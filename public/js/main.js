@@ -6,6 +6,8 @@ import * as storage from './storage.js';
 import { sfx, unlock as unlockAudio } from './sound.js';
 
 const $ = (s) => document.querySelector(s);
+// Tek dosyalık internetsiz sürümde sunucu ve VS kapalı.
+const OFFLINE = !!window.OKKUP_OFFLINE;
 const HINT_PENALTY_MS = 5000;
 
 const store = storage.load();
@@ -144,11 +146,11 @@ function showHowTo() {
     <ul class="howto">
       <li>Küpün yüzeyindeki bir <b>oka dokun</b>: ok sadece <b>ucunun gösterdiği yöne</b> kayar, gövdesi yolunu izler ve küpten çıkar.</li>
       <li>Ucunun önünde başka bir ok varsa <b>çarpar</b> ve geri döner — oklar birbirinin içinden geçemez. Çarpınca kısa süre sersemlersin!</li>
-      <li>🐥 bölümlerde <b>kırmızı kilit okunu</b> çıkar: asma kilit açılır ve tatlı dostun kurtulur.</li>
-      <li>🧹 bölümlerde <b>tüm okları temizle</b>, kafes açılsın.</li>
+      <li>🐥 bölümlerde tatlı dostun küpün <b>en zor noktasında</b>, pembe alandaki okların arasında kafeste. Onu saran okları temizle, kafes açılsın!</li>
+      <li>🧹 bölümlerde <b>tüm okları temizle</b>.</li>
       <li>Ne kadar hızlı bitirirsen o kadar çok <b>puan</b> ve ⭐ alırsın. 💡 ipucu +5 sn ekler.</li>
-      <li>Bir parmakla <b>döndür</b>, iki parmakla <b>büyüt/küçült</b> (veya ＋ / － düğmeleri).</li>
-      <li>⚔️ VS: arkadaşınla <b>ikinizin de açtığı ortak bir bölümde</b>, aynı bulmacada, aynı anda başlarsınız. Karakteri ilk kurtaran kazanır!</li>
+      <li>Bir parmakla kaydırarak küpü <b>her yöne çevir</b>, iki parmakla fotoğraf gibi <b>büyüt/küçült</b> ve kaydır. Boş yere çift dokununca görünüm sıfırlanır.</li>
+      ${OFFLINE ? '' : '<li>⚔️ VS: arkadaşınla <b>ikinizin de açtığı ortak bir bölümde</b>, aynı bulmacada, aynı anda başlarsınız. Karakteri ilk kurtaran kazanır!</li>'}
     </ul>
     <div class="actions"><button class="btn primary" data-action="ok">Anladım!</button></div>`, {}, { dismissable: true });
 }
@@ -257,7 +259,8 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     running: false, ended: false, bumps: 0, hints: 0, penaltyMs: 0,
     startTime: 0, stunUntil: 0, timerRaf: 0,
   };
-  $('#hud-level').textContent = `${mode === 'vs' ? '⚔️ ' : ''}Bölüm ${level} · ${puzzle.goal === 'rescue' ? '🐥 Kilidi aç!' : '🧹 Hepsini temizle!'}`;
+  $('#hud-level').textContent = `${mode === 'vs' ? '⚔️ ' : ''}Bölüm ${level} · ${puzzle.goal === 'rescue' ? '🐥 Dostunu kurtar!' : '🧹 Hepsini temizle!'}`;
+  $('#hud-unit').textContent = puzzle.goal === 'rescue' ? 'kafeste' : 'ok';
   $('#hud-timer').textContent = fmtTime(0);
   $('#btn-hint').hidden = mode === 'vs';
   $('#vs-bar').hidden = mode !== 'vs';
@@ -273,6 +276,7 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     game.startTime = performance.now();
     tickTimer();
     if (level <= 2 && mode === 'solo') showTutorial();
+    if (level === 1 && mode === 'solo') setTimeout(() => toast('☝️ Bir parmakla çevir · 🤏 iki parmakla büyüt', 3200), 1800);
   });
 }
 
@@ -310,7 +314,7 @@ function tickTimer() {
 function updateHud() {
   if (!game) return;
   const { state } = game;
-  $('#hud-remaining').textContent = state.remaining;
+  $('#hud-remaining').textContent = game.puzzle.goal === 'rescue' ? state.trapLeft : state.remaining;
   if (game.mode === 'vs') $('#vs-me').style.width = `${100 * state.progress}%`;
 }
 
@@ -337,8 +341,6 @@ function onTap(id) {
   if (game.state.solved) finishGame();
 }
 
-$('#btn-zoom-in').addEventListener('click', () => scene?.zoom(1.25));
-$('#btn-zoom-out').addEventListener('click', () => scene?.zoom(0.8));
 $('#btn-reset-view').addEventListener('click', () => scene?.resetView());
 $('#btn-hint').addEventListener('click', () => {
   if (!game?.running || game.mode !== 'solo') return;
@@ -467,8 +469,13 @@ function finishGame() {
 }
 
 // ---- Ağ -------------------------------------------------------------------
-const net = new Net();
-net.connect(() => ({ id: store.id, token: store.token, name: store.name, maxLevel: store.maxLevel }));
+const net = OFFLINE ? { connected: false, send: () => false, on: () => {} } : new Net();
+if (OFFLINE) {
+  $('#btn-friends').hidden = true;
+  $('#conn-status').hidden = true;
+} else {
+  net.connect(() => ({ id: store.id, token: store.token, name: store.name, maxLevel: store.maxLevel }));
+}
 
 net.on('status', ({ connected }) => {
   const el = $('#conn-status');

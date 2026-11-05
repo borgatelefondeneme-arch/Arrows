@@ -1,11 +1,10 @@
 // 3D sahne: kutuyu, yüzeyindeki kıvrımlı okları, kilitli karakteri çizer;
 // döndürme / yakınlaştırma / dokunma ve okların kayma animasyonları.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DIRS, axisOf, rayCells, headOf } from './puzzle.js';
 
 const ARROW_COLOR = '#2b2350';
-const LOCK_COLOR = '#ff2e63';
+const TRAP_COLOR = '#ff6b9a';
 const LINE_W = 0.2;
 const HEAD_W = 0.3;
 const HEAD_L = 0.36;
@@ -141,18 +140,6 @@ function makeCharacter() {
   return g;
 }
 
-function makePadlock() {
-  const lock = new THREE.Group();
-  const gold = new THREE.MeshStandardMaterial({ color: '#ffca28', metalness: 0.7, roughness: 0.25 });
-  const bodyM = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.08), gold);
-  const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 8, 16, Math.PI), new THREE.MeshStandardMaterial({ color: '#b0a27a', metalness: 0.8, roughness: 0.3 }));
-  shackle.position.y = 0.09;
-  const hole = new THREE.Mesh(new THREE.CircleGeometry(0.025, 12), new THREE.MeshBasicMaterial({ color: '#5d4037' }));
-  hole.position.z = 0.041;
-  lock.add(bodyM, shackle, hole);
-  return lock;
-}
-
 function makeCage() {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: '#c9a227', metalness: 0.7, roughness: 0.3, transparent: true });
@@ -167,22 +154,51 @@ function makeCage() {
       g.add(b);
     }
   }
-  const ringGeo = new THREE.BoxGeometry(h * 2 + 0.06, 0.05, h * 2 + 0.06);
+  // Üst ve alt: içi açık kare çerçeve (karakter yukarıdan da görünsün)
+  const rail = new THREE.BoxGeometry(h * 2 + 0.06, 0.05, 0.05);
   for (const y of [-h, h]) {
-    const r = new THREE.Mesh(ringGeo, mat);
-    r.position.y = y;
-    g.add(r);
+    for (let i = 0; i < 4; i++) {
+      const r = new THREE.Mesh(rail, mat);
+      const a = (i * Math.PI) / 2;
+      r.position.set(Math.sin(a) * h, y, Math.cos(a) * h);
+      r.rotation.y = a;
+      g.add(r);
+    }
   }
   g.userData.mat = mat;
   return g;
 }
 
+// Karakterin hapsolduğu 3x3 alanı yüzeyde pembe kareyle işaretler.
+function trapPatch(cells, centerKey, keyOf) {
+  const pos = [];
+  for (const cell of cells) {
+    const n = N[cell.f];
+    const a = axisOf(cell.f);
+    const [b, c] = [0, 1, 2].filter((k) => k !== a);
+    const ub = new THREE.Vector3(); ub.setComponent(b, 0.47);
+    const uc = new THREE.Vector3(); uc.setComponent(c, 0.47);
+    const o = v3(cell.c).addScaledVector(n, 0.004);
+    const p1 = o.clone().sub(ub).sub(uc);
+    const p2 = o.clone().add(ub).sub(uc);
+    const p3 = o.clone().add(ub).add(uc);
+    const p4 = o.clone().sub(ub).add(uc);
+    pos.push(...p1.toArray(), ...p2.toArray(), ...p3.toArray(), ...p1.toArray(), ...p3.toArray(), ...p4.toArray());
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: TRAP_COLOR, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+}
+
 // ---- Sahne ----------------------------------------------------------------
+// Kamera hep -z yönüne bakar; küp "pivot" grubuyla elle döndürülür (her yöne serbest),
+// iki parmakla fotoğraf gibi büyütülür ve kaydırılır.
 export class GameScene {
-  constructor(container, { onTap, arrowAt } = {}) {
+  constructor(container, { onTap, arrowAt, onDoubleTapEmpty } = {}) {
     this.container = container;
     this.onTap = onTap;
     this.arrowAt = arrowAt;
+    this.onDoubleTapEmpty = onDoubleTapEmpty;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -190,23 +206,21 @@ export class GameScene {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
+    this.dist = 10;
+    this.minDist = 2;
+    this.maxDist = 60;
+    this.pan = new THREE.Vector2(0, 0);
+    this.spin = { vx: 0, vy: 0 }; // bırakınca süzülerek dönmeye devam etsin
 
     this.scene.add(new THREE.HemisphereLight('#ffffff', '#b8b0ff', 2.2));
     const sun = new THREE.DirectionalLight('#ffffff', 1.0);
     sun.position.set(4, 10, 7);
     this.scene.add(sun);
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.1;
-    this.controls.enablePan = false;
-    this.controls.rotateSpeed = 0.85;
-    this.controls.zoomSpeed = 1.1;
-    this.controls.minPolarAngle = 0.02;
-    this.controls.maxPolarAngle = Math.PI - 0.02;
-
+    this.pivot = new THREE.Group();
     this.world = new THREE.Group();
-    this.scene.add(this.world);
+    this.pivot.add(this.world);
+    this.scene.add(this.pivot);
     this.tweens = [];
     this.arrows = new Map();
     this.raycaster = new THREE.Raycaster();
@@ -221,6 +235,7 @@ export class GameScene {
 
   load(puzzle) {
     this.clear();
+    this.resize(); // oyun ekranı yeni açıldıysa gerçek ekran oranını kullan
     this.puzzle = puzzle;
     const [W, H, D] = puzzle.dims;
     this.world.position.set(-W / 2, -H / 2, -D / 2);
@@ -239,11 +254,10 @@ export class GameScene {
 
     for (const a of puzzle.arrows) {
       const path = buildPath(puzzle.dims, a);
-      const color = a.lock ? LOCK_COLOR : ARROW_COLOR;
-      const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true });
+      const mat = new THREE.MeshBasicMaterial({ color: ARROW_COLOR, side: THREE.DoubleSide, transparent: true });
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
-      mesh.renderOrder = a.lock ? 2 : 1;
-      const entry = { id: a.id, arrow: a, path, mesh, mat, color, shift: 0 };
+      mesh.renderOrder = 1;
+      const entry = { id: a.id, arrow: a, path, mesh, mat, color: ARROW_COLOR, shift: 0 };
       this.setShift(entry, 0);
       this.world.add(mesh);
       this.arrows.set(a.id, entry);
@@ -253,22 +267,27 @@ export class GameScene {
     this.character = makeCharacter();
     this.freed = false;
     this.charFlying = false;
-    if (puzzle.goal === 'rescue' && puzzle.lock !== null) {
-      // Kilit okunun kuyruğunda, asma kilitle yüzeye bağlı.
-      const tail = puzzle.arrows[puzzle.lock].cells[0];
-      const n = N[tail.f];
+    if (puzzle.goal === 'rescue' && puzzle.character) {
+      // En zor noktada, okların arasında küçük bir kafeste.
+      const cell = puzzle.character.cell;
+      this.patch = trapPatch(puzzle.character.ring, null, null);
+      this.world.add(this.patch);
+      const n = N[cell.f];
       const holder = new THREE.Group();
-      holder.position.copy(v3(tail.c)).addScaledVector(n, 0.02);
-      holder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
-      this.character.scale.setScalar(0.85);
-      this.character.position.y = 0.27;
-      const lock = makePadlock();
-      lock.position.set(0, 0.16, 0.27);
-      lock.scale.setScalar(1.1);
-      holder.add(this.character, lock);
+      holder.position.copy(v3(cell.c)).addScaledVector(n, 0.01);
+      // Yüzü yüzeyden dışarı baksın; "yukarısı" yan yüzlerde +y, üst/alt yüzlerde -z/+z olsun.
+      const up = Math.abs(n.y) > 0.5 ? new THREE.Vector3(0, 0, -n.y) : new THREE.Vector3(0, 1, 0);
+      const xAxis = new THREE.Vector3().crossVectors(up, n);
+      holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, up, n));
+      this.character.scale.setScalar(0.95);
+      this.character.position.z = 0.3;
+      this.cage = makeCage();
+      this.cage.scale.setScalar(0.98);
+      this.cage.rotation.x = Math.PI / 2;
+      this.cage.position.z = 0.45;
+      holder.add(this.character, this.cage);
       this.world.add(holder);
       this.holder = holder;
-      this.padlock = lock;
       this.charMode = 'surface';
     } else {
       // Tüm okları temizle bölümleri: karakter kutunun üstünde bir kafeste.
@@ -283,30 +302,37 @@ export class GameScene {
 
     const radius = Math.sqrt(W * W + H * H + D * D) / 2;
     this.radius = radius;
-    // Kafes kutunun üstünde duruyorsa onu da kadraja al.
     const fit = radius + (this.charMode === 'cage' ? 0.9 : 0);
-    // Dikey telefonda yatay görüş açısı dar: ikisinden küçüğüne göre sığdır.
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
-    this.baseDistance = (fit / Math.sin(Math.min(vHalf, hHalf))) * 0.8 + 0.5;
-    this.controls.minDistance = Math.max(2, radius * 0.9);
-    this.controls.maxDistance = radius * 6 + 6;
-    this.controls.target.set(0, this.charMode === 'cage' ? 0.45 : 0, 0);
-    this.camera.position.copy(this.homeDir()).multiplyScalar(this.baseDistance).add(this.controls.target);
-    this.controls.update();
+    this.baseDistance = (fit / Math.sin(Math.min(vHalf, hHalf))) * 1.0 + 0.3;
+    this.minDist = radius + 1.2; // kamera hiçbir zaman küpün içine girmesin
+    this.maxDist = this.baseDistance * 2.5;
+    this.homeQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, -0.65, 0, 'XYZ'));
+    if (this.charMode === 'surface') {
+      // Başlangıçta karakterin bulunduğu yüz hafif açılı olarak bize baksın.
+      // Karakterin yüzünü 90°'lik bir dönüşle öne (+z) getir, sonra standart açıyı uygula.
+      const f = puzzle.character.cell.f;
+      const turn = [[0, 1, 0, -Math.PI / 2], [0, 1, 0, Math.PI / 2], [1, 0, 0, Math.PI / 2], [1, 0, 0, -Math.PI / 2], [0, 1, 0, 0], [0, 1, 0, Math.PI]][f];
+      const r = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(turn[0], turn[1], turn[2]), turn[3]);
+      this.homeQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.35, -0.5, 0, 'XYZ')).multiply(r);
+    }
+    this.pivot.quaternion.copy(this.homeQuat);
+    this.dist = this.baseDistance;
+    this.pan.set(0, this.charMode === 'cage' ? 0.45 : 0);
+    this.spin.vx = this.spin.vy = 0;
+    this.updateCamera();
   }
-
-  homeDir() { return new THREE.Vector3(0.75, 0.62, 1).normalize(); }
 
   clear() {
     this.tweens = [];
     for (const child of [...this.world.children]) this.world.remove(child);
-    for (const extra of [this.character, this.padlock, this.particles?.pts]) if (extra?.parent === this.scene) this.scene.remove(extra);
+    for (const extra of [this.character, this.particles?.pts]) if (extra?.parent === this.scene) this.scene.remove(extra);
     this.arrows.clear();
     this.particles = null;
     this.cage = null;
     this.holder = null;
-    this.padlock = null;
+    this.patch = null;
   }
 
   setShift(entry, s) {
@@ -316,46 +342,143 @@ export class GameScene {
     entry.mesh.geometry.computeBoundingSphere();
   }
 
-  // Yakınlaştır (>1) / uzaklaştır (<1)
-  zoom(factor) {
-    const off = this.camera.position.clone().sub(this.controls.target);
-    const start = off.length();
-    const len = THREE.MathUtils.clamp(start / factor, this.controls.minDistance, this.controls.maxDistance);
-    this.tween(250, (t) => {
-      const cur = this.camera.position.clone().sub(this.controls.target);
-      cur.setLength(THREE.MathUtils.lerp(start, len, easeOutCubic(t)));
-      this.camera.position.copy(this.controls.target).add(cur);
-    });
+  // ---- Kamera ve dokunma kontrolleri ---------------------------------------
+  updateCamera() {
+    this.camera.position.set(this.pan.x, this.pan.y, this.dist);
+    this.camera.lookAt(this.pan.x, this.pan.y, 0);
+  }
+
+  viewHalfHeight(dist = this.dist) {
+    return Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * dist;
+  }
+
+  rotateBy(dx, dy) {
+    const k = Math.PI / Math.max(320, Math.min(this.container.clientWidth, this.container.clientHeight));
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * k);
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * k));
+    this.pivot.quaternion.premultiply(q).normalize();
+  }
+
+  // Parmakların ortasındaki nokta yerinde kalacak şekilde büyüt (fotoğraf gibi).
+  zoomAt(clientX, clientY, factor) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const nx = ((clientX - r.left) / r.width) * 2 - 1;
+    const ny = -(((clientY - r.top) / r.height) * 2 - 1);
+    const h0 = this.viewHalfHeight();
+    const px = this.pan.x + nx * h0 * this.camera.aspect;
+    const py = this.pan.y + ny * h0;
+    this.dist = THREE.MathUtils.clamp(this.dist / factor, this.minDist, this.maxDist);
+    const h1 = this.viewHalfHeight();
+    this.pan.set(px - nx * h1 * this.camera.aspect, py - ny * h1);
+    this.clampPan();
+  }
+
+  panBy(dxPx, dyPx) {
+    const wpp = (2 * this.viewHalfHeight()) / Math.max(1, this.container.clientHeight);
+    this.pan.x -= dxPx * wpp;
+    this.pan.y += dyPx * wpp;
+    this.clampPan();
+  }
+
+  clampPan() {
+    const lim = (this.radius || 3) * 1.2;
+    this.pan.x = THREE.MathUtils.clamp(this.pan.x, -lim, lim);
+    this.pan.y = THREE.MathUtils.clamp(this.pan.y, -lim, lim);
   }
 
   resetView() {
     if (!this.puzzle) return;
-    const to = this.homeDir().multiplyScalar(this.baseDistance).add(this.controls.target);
-    const from = this.camera.position.clone();
-    this.tween(450, (t) => this.camera.position.lerpVectors(from, to, easeOutCubic(t)));
+    const q0 = this.pivot.quaternion.clone();
+    const d0 = this.dist;
+    const p0 = this.pan.clone();
+    const p1 = new THREE.Vector2(0, this.charMode === 'cage' ? 0.45 : 0);
+    this.spin.vx = this.spin.vy = 0;
+    this.tween(450, (t) => {
+      const e = easeOutCubic(t);
+      this.pivot.quaternion.slerpQuaternions(q0, this.homeQuat, e);
+      this.dist = THREE.MathUtils.lerp(d0, this.baseDistance, e);
+      this.pan.lerpVectors(p0, p1, e);
+    });
   }
 
   bindPointer() {
     const el = this.renderer.domElement;
-    let down = null;
-    let multi = false;
-    const pointers = new Set();
-    el.addEventListener('pointerdown', (e) => {
-      pointers.add(e.pointerId);
-      if (pointers.size > 1) multi = true;
-      if (pointers.size === 1) { multi = false; down = { x: e.clientX, y: e.clientY, t: performance.now() }; }
-    });
-    const up = (e) => {
-      pointers.delete(e.pointerId);
-      if (!down || multi) { if (!pointers.size) down = null; return; }
-      const dx = e.clientX - down.x;
-      const dy = e.clientY - down.y;
-      const dt = performance.now() - down.t;
-      down = null;
-      if (e.type === 'pointerup' && dx * dx + dy * dy < 144 && dt < 450) this.handleTap(e.clientX, e.clientY);
+    const pts = new Map();
+    let gesture = null; // tek parmak: döndür/dokun, iki parmak: büyüt/kaydır
+    let lastTap = 0;
+    const two = () => {
+      const [a, b] = [...pts.values()];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
     };
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture?.(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.spin.vx = this.spin.vy = 0;
+      if (pts.size === 1) {
+        gesture = { kind: 'one', x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false, multi: false, lx: e.clientX, ly: e.clientY, lt: performance.now() };
+      } else if (pts.size === 2 && gesture) {
+        gesture.multi = true;
+        gesture.pinch = two();
+      }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId) || !gesture) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size >= 2 && gesture.pinch) {
+        const now = two();
+        if (gesture.pinch.d > 0 && now.d > 0) this.zoomAt(now.mx, now.my, now.d / gesture.pinch.d);
+        this.panBy(now.mx - gesture.pinch.mx, now.my - gesture.pinch.my);
+        gesture.pinch = now;
+        return;
+      }
+      if (pts.size === 1 && !gesture.multi) {
+        const dx = e.clientX - gesture.lx;
+        const dy = e.clientY - gesture.ly;
+        if (!gesture.moved && Math.hypot(e.clientX - gesture.x0, e.clientY - gesture.y0) > 8) gesture.moved = true;
+        if (gesture.moved) {
+          this.rotateBy(dx, dy);
+          const now = performance.now();
+          const dt = Math.max(1, now - gesture.lt);
+          this.spin.vx = this.spin.vx * 0.5 + (dx / dt) * 0.5;
+          this.spin.vy = this.spin.vy * 0.5 + (dy / dt) * 0.5;
+          gesture.lt = now;
+        }
+        gesture.lx = e.clientX;
+        gesture.ly = e.clientY;
+      }
+    });
+    const end = (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.delete(e.pointerId);
+      if (!gesture) return;
+      if (pts.size === 1) {
+        // İki parmaktan birini kaldırınca kalan parmak zıplatmadan devam etsin.
+        const [p] = [...pts.values()];
+        gesture.pinch = null;
+        gesture.lx = p.x; gesture.ly = p.y;
+        return;
+      }
+      if (pts.size > 0) return;
+      const g = gesture;
+      gesture = null;
+      const dt = performance.now() - g.t0;
+      if (e.type === 'pointerup' && !g.multi && !g.moved && dt < 450) {
+        const id = this.pick(e.clientX, e.clientY);
+        const now = performance.now();
+        if (id !== null) this.onTap?.(id);
+        else if (now - lastTap < 350) this.resetView(); // boş yere çift dokun: görünümü sıfırla
+        lastTap = id === null ? now : 0;
+        this.spin.vx = this.spin.vy = 0;
+      } else if (g.multi || performance.now() - g.lt > 80) {
+        this.spin.vx = this.spin.vy = 0;
+      }
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015));
+    }, { passive: false });
   }
 
   // Dokunulan noktaya en yakın oku bul (ince çizgilere parmakla dokunmak kolay olsun diye toleranslı).
@@ -393,12 +516,6 @@ export class GameScene {
       }
     }
     return best;
-  }
-
-  handleTap(x, y) {
-    if (!this.puzzle || !this.onTap) return;
-    const id = this.pick(x, y);
-    if (id !== null) this.onTap(id);
   }
 
   tween(duration, fn, done) {
@@ -451,16 +568,16 @@ export class GameScene {
     blink();
   }
 
-  // Okun ucunun ekrandaki konumu (öğretici el için). Uç kameradan görünmüyorsa null.
+  // Okun ucunun ekrandaki konumu (öğretici el için). Uç görünmüyorsa ya da ekran dışındaysa null.
   screenPosOf(id) {
     const e = this.arrows.get(id);
     if (!e) return null;
     const head = headOf(e.arrow);
-    const n = N[head.f]; // dünya grubu sadece ötelenmiş, dönmüyor
+    const n = N[head.f].clone().applyQuaternion(this.pivot.quaternion);
     const p = this.world.localToWorld(v3(head.c).addScaledVector(N[head.f], 0.05));
     if (n.dot(this.camera.position.clone().sub(p)) <= 0) return null;
     const v = p.clone().project(this.camera);
-    if (Math.abs(v.x) > 0.92 || Math.abs(v.y) > 0.85 || v.z > 1) return null; // ekran dışında
+    if (Math.abs(v.x) > 0.92 || Math.abs(v.y) > 0.85 || v.z > 1) return null;
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }
@@ -469,42 +586,36 @@ export class GameScene {
   celebrate() {
     this.freed = true;
     const ch = this.character;
+    const cage = this.cage;
+    if (cage) {
+      this.tween(700, (t) => { cage.scale.setScalar(1 + t * 0.8); cage.userData.mat.opacity = 1 - t; }, () => { cage.visible = false; });
+    }
+    if (this.patch) this.tween(600, (t) => { this.patch.material.opacity = 0.28 * (1 - t); });
     if (this.charMode === 'surface') {
       const start = ch.getWorldPosition(new THREE.Vector3());
-      const lockStart = this.padlock.getWorldPosition(new THREE.Vector3());
       const s0 = ch.getWorldScale(new THREE.Vector3()).x;
-      this.holder.remove(ch, this.padlock);
-      this.scene.add(ch, this.padlock);
+      this.holder.remove(ch);
+      this.scene.add(ch);
       ch.position.copy(start);
       ch.scale.setScalar(s0);
-      this.padlock.position.copy(lockStart);
-      // Kameraya doğru zıplayıp kutunun önünde sevinsin.
-      const toCam = this.camera.position.clone().sub(this.controls.target).normalize();
-      const goal = toCam.clone().multiplyScalar(this.radius * 0.6 + 0.9);
+      // Kafesten çıkıp ekrana doğru zıplasın ve kutunun önünde sevinsin.
+      const goal = new THREE.Vector3(this.pan.x, this.pan.y, Math.min(this.radius * 0.7 + 1, this.dist * 0.45));
       this.charHome = goal;
-      const s1 = Math.max(1.1, this.radius * 0.35);
+      const s1 = Math.max(1.1, this.radius * 0.3);
       this.charFlying = true;
-      this.tween(800, (t) => {
+      this.tween(850, (t) => {
         const e = easeOutCubic(t);
         ch.position.lerpVectors(start, goal, e);
         ch.position.y += Math.sin(t * Math.PI) * 1.2;
         ch.scale.setScalar(s0 + (s1 - s0) * easeOutBack(t));
         ch.lookAt(this.camera.position);
       }, () => { this.charFlying = false; });
-      const lock = this.padlock;
-      this.tween(700, (t) => {
-        lock.position.y = lockStart.y - t * t * 4;
-        lock.rotation.z = t * 4;
-        lock.scale.setScalar(1.1 * (1 - t) + 0.001);
-      }, () => { lock.visible = false; });
       this.charMode = 'free';
       this.spawnConfetti(goal, this.scene);
     } else {
-      const cage = this.cage;
-      this.tween(700, (t) => { cage.scale.setScalar(1 + t * 0.8); cage.userData.mat.opacity = 1 - t; }, () => { cage.visible = false; });
       const s = Math.max(1.4, this.radius * 0.3);
       this.tween(900, (t) => { ch.scale.setScalar(1 + easeOutBack(t) * (s - 1)); });
-      this.charMode = 'free';
+      this.charMode = 'free-cage';
       this.spawnConfetti(this.charHome, this.world);
     }
   }
@@ -515,7 +626,7 @@ export class GameScene {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const vel = [];
-    const palette = ['#ff8a80', '#ffb74d', '#81c784', '#4fc3f7', '#ba68c8', '#ff2e63'].map((c) => new THREE.Color(c));
+    const palette = ['#ff8a80', '#ffb74d', '#81c784', '#4fc3f7', '#ba68c8', '#ff6b9a'].map((c) => new THREE.Color(c));
     for (let i = 0; i < count; i++) {
       pos.set([at.x, at.y, at.z], i * 3);
       const c = palette[i % palette.length];
@@ -542,11 +653,21 @@ export class GameScene {
         tw.done?.();
       }
     }
+    // Parmağı bırakınca süzülerek dönme
+    if (Math.abs(this.spin.vx) + Math.abs(this.spin.vy) > 0.002) {
+      const ms = dt * 1000;
+      this.rotateBy(this.spin.vx * ms, this.spin.vy * ms);
+      const decay = Math.pow(0.0025, dt);
+      this.spin.vx *= decay;
+      this.spin.vy *= decay;
+    }
     const ch = this.character;
     if (ch) {
       if (this.charMode === 'surface') {
-        ch.position.y = 0.27 + Math.abs(Math.sin(t * 3)) * 0.07;
-        ch.rotation.y = Math.sin(t * 1.3) * 0.5;
+        // Kafeste hafifçe zıplayıp sağa sola bakar, hep kameraya dönük.
+        ch.position.z = 0.3 + Math.abs(Math.sin(t * 3)) * 0.07;
+        ch.lookAt(this.camera.position); // tatlı yüzü hep oyuncuya baksın
+        ch.rotateZ(Math.sin(t * 2.1) * 0.12);
       } else if (this.charMode === 'cage') {
         ch.position.y = this.charHome.y + Math.sin(t * 2.4) * 0.04;
         ch.lookAt(this.camera.position);
@@ -568,7 +689,7 @@ export class GameScene {
       pts.material.opacity = Math.max(0, 1 - this.particles.life / 3);
       if (this.particles.life > 3) { this.particles.parent.remove(pts); this.particles = null; }
     }
-    this.controls.update();
+    this.updateCamera();
     this.renderer.render(this.scene, this.camera);
   }
 

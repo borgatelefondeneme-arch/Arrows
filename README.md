@@ -1,8 +1,16 @@
 # Ok Küp 🧊➜🐥
 
 Küpün (ve ileriki bölümlerde dikdörtgen prizmaların) yüzeyine çizilmiş kıvrımlı okları
-çıkarıp tatlı karakteri kurtardığın 3D bulmaca oyunu. iPhone'da Safari'de çalışır;
-**Ana Ekrana Ekle** ile uygulama gibi tam ekran açılır.
+çıkarıp en zor noktada hapsolmuş tatlı karakteri kurtardığın 3D bulmaca oyunu.
+iPhone'da Safari'de çalışır; **Ana Ekrana Ekle** ile uygulama gibi tam ekran açılır.
+
+## İnternetsiz tek dosya
+```bash
+npm install
+npm run build:offline   # → dist/ok-kup.html (Three.js dahil her şey tek dosyada, ~580 KB)
+```
+`dist/ok-kup.html` hiçbir ağ isteği yapmaz. Bu sürümde VS/arkadaş özellikleri gizlidir
+(sunucu gerektirdikleri için); tek oyunculu bölümlerin hepsi çalışır, ilerleme cihazda saklanır.
 
 ## Kurallar
 - Kutunun her yüzü kareli bir ızgara; oklar bu ızgarada kıvrılan çizgiler (köşelerden komşu
@@ -11,11 +19,13 @@ Küpün (ve ileriki bölümlerde dikdörtgen prizmaların) yüzeyine çizilmiş 
   yüzün kenarından uçup gider.
 - Ucunun önünde başka bir ok varsa **çarpar** ve geri döner (oklar birbirinin içinden geçemez).
   Çarpınca 1 sn sersemlersin.
-- 🐥 **Kilidi aç** bölümleri: kırmızı **kilit oku** karakteri asma kilitle tutar. Önündeki okları
-  temizleyip kilit okunu çıkarınca karakter kurtulur.
+- 🐥 **Dostunu kurtar** bölümleri: karakter yüzeyin **en zor noktasında** (çıkması için en çok okun
+  temizlenmesi gereken yerde), pembe işaretli alanda okların arasında bir kafeste. Onu saran
+  okların hepsi çıkınca kafes açılır ve karakter kurtulur.
 - 🧹 **Hepsini temizle** bölümleri: tüm oklar çıkınca kutunun üstündeki kafes açılır.
 - **Puan** bitirme süresine göre: hızlı = çok puan + 3 ⭐. 💡 ipucu +5 sn ekler.
-- Bir parmakla **döndür**, iki parmakla **büyüt/küçült** (ya da ＋/－ düğmeleri, ⟲ görünümü sıfırlar).
+- Tek parmakla kaydırarak küpü **her yöne serbestçe çevir** (bırakınca süzülür), iki parmakla
+  fotoğraf gibi **büyüt/küçült ve kaydır**. Boş yere çift dokunmak ya da ⟲ görünümü sıfırlar.
 
 ## Bölümler
 20 el yapımı bölüm kolaydan zora gider (2×2×2 öğretici küpten 10×10×10 efsane küpe; arada
