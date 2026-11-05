@@ -50,16 +50,23 @@ test('oklar geçerli: hücreler komşu, çakışma yok, uç düz geliyor, önün
   }
 });
 
-test('verilen çözüm bölümü bitirir', () => {
+test('verilen çözüm karakteri kurtarır, sonra kalan bütün oklar da bitirilebilir', () => {
   for (const lv of LEVELS) {
     const p = generatePuzzle(lv);
     const s = new PuzzleState(p);
     for (const id of p.solution) assert.ok(s.tryMove(id).ok, `bölüm ${lv}, ok ${id}`);
-    assert.ok(s.solved, `bölüm ${lv}`);
+    assert.ok(s.solved, `bölüm ${lv}: karakter kaçmalı`);
+    let guard = 0;
+    while (!s.allCleared) {
+      const free = p.arrows.filter((a) => s.isFree(a.id));
+      assert.ok(free.length, `bölüm ${lv}: kurtardıktan sonra kilitlendi`);
+      s.tryMove(free[0].id);
+      assert.ok(++guard < 10000);
+    }
   }
 });
 
-test('bulmaca asla kilitlenmez: rastgele serbest ok seçerek hep bitirilir', () => {
+test('bulmaca asla kilitlenmez: rastgele serbest ok seçerek karakter hep kurtarılır', () => {
   for (const lv of LEVELS) {
     for (const seed of [1, 99, 2024]) {
       const p = generatePuzzle(lv, seed);
@@ -75,20 +82,28 @@ test('bulmaca asla kilitlenmez: rastgele serbest ok seçerek hep bitirilir', () 
   }
 });
 
-test('kurtarma bölümleri: karakter boş bir hücrede, etrafı oklarla sarılı ve hemen kurtarılamıyor', () => {
+test('karakter okların arasına sıkışmış: hücresi boş, başta kaçamıyor, okları durduruyor', () => {
+  let stoppedOne = false;
   for (const lv of LEVELS) {
     const p = generatePuzzle(lv);
-    if (p.goal !== 'rescue') continue;
     const s = new PuzzleState(p);
-    assert.equal(s.arrowAt(p.character.cell), null, `bölüm ${lv}: karakterin hücresi boş olmalı`);
-    assert.ok(p.trap.length >= 3, `bölüm ${lv}`);
-    const ring = new Set(p.character.ring.map(cellKey));
-    for (const id of p.trap) assert.ok(p.arrows[id].cells.some((c) => ring.has(cellKey(c))));
-    // Sadece başta serbest olan okları çıkarmak karakteri kurtarmaya yetmemeli.
-    for (const a of p.arrows.filter((x) => s.isFree(x.id))) s.tryMove(a.id);
-    assert.ok(!s.solved, `bölüm ${lv}: çok kolay`);
-    assert.ok(p.required.length > p.trap.length);
+    assert.equal(s.arrowAt(p.character.cell), null);
+    assert.equal(s.openEscape(), null, `bölüm ${lv}: başta yol açık olmamalı`);
+    assert.ok(p.character.cost >= 1);
+    // Önü boş ama yolu karakterden geçen bir ok varsa ona çarpar
+    for (const a of p.arrows) {
+      if (!s.isFree(a.id) && rayCells(p.dims, headOf(a), a.dir).some((c) => cellKey(c) === cellKey(p.character.cell))) {
+        const r = new PuzzleState(p).tryMove(a.id);
+        if (r.hit === 'character') { stoppedOne = true; break; }
+      }
+    }
+    if (lv >= 7) {
+      // Sadece başta serbest olan okları çıkarmak yetmemeli
+      for (const a of p.arrows.filter((x) => s.isFree(x.id))) s.tryMove(a.id);
+      assert.ok(!s.solved, `bölüm ${lv}: çok kolay`);
+    }
   }
+  assert.ok(stoppedOne, 'karakter en az bir bölümde bir oku durdurmalı');
 });
 
 test('engelli ok çarpar ve yerinde kalır', () => {
@@ -102,12 +117,11 @@ test('engelli ok çarpar ve yerinde kalır', () => {
 });
 
 test('bölümler büyür ve zorlaşır, küp dışında prizmalar da var', () => {
-  const req = [2, 7, 13, 20].map((l) => generatePuzzle(l).required.length);
-  assert.ok(req[3] >= 15);
+  const req = [2, 7, 13, 20].map((l) => generatePuzzle(l).character.cost);
+  assert.ok(req[3] >= 8, req.join(','));
   assert.ok(req[0] < req[3], req.join(','));
   const nonCube = LEVELS.map(levelConfig).filter((c) => new Set(c.dims).size > 1);
   assert.ok(nonCube.length >= 5);
-  assert.ok(LEVELS.map(levelConfig).some((c) => c.goal === 'clear'));
 });
 
 test('puan: hızlı bitiren daha çok puan ve yıldız alır', () => {

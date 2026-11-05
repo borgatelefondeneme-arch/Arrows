@@ -6,9 +6,10 @@
 // - Bir oka dokununca ok, UCUNUN gösterdiği yöne doğru kayar; gövdesi kendi yolunu izler.
 //   Ucun önündeki yol (yüzün kenarına kadar) boşsa ok kenardan uçup gider.
 // - Yolda başka bir ok varsa çarpar ve geri döner: oklar birbirinin içinden geçemez.
-// - 'rescue' bölümlerinde tatlı karakter yüzeyin EN ZOR noktasında, okların arasında kafestedir.
-//   Etrafındaki 8 hücreyi kaplayan oklar temizlenince kurtulur.
-//   'clear' bölümlerinde tüm oklar temizlenince kafes açılır.
+// - Tatlı karakter yüzeyin EN ZOR noktasında okların arasına sıkışmıştır. Dört yönünden birinde
+//   yüzün kenarına kadar düz yol açılınca o yönden koşarak kaçar → bölüm geçilir.
+//   Karakter de engeldir: oklar onun içinden geçemez. Kurtardıktan sonra istersen kalan okları
+//   da bitirip "tam temizlik" bonusu alırsın.
 //
 // Üretim: oklar sırayla eklenir; her yeni okun önü (eklendiği anda) boştur. Böylece ekleme
 // sırasının TERSİ her zaman geçerli bir çözümdür. Bir oku çıkarmak hiçbir yolu kapatmadığı için
@@ -95,21 +96,21 @@ export const headOf = (arrow) => arrow.cells[arrow.cells.length - 1];
 // ---- Bölümler ---------------------------------------------------------------
 // goal: 'rescue' (kilit okunu çıkar, karakteri kurtar) | 'clear' (tüm okları temizle)
 const HAND_LEVELS = [
-  { name: 'İlk Adım', dims: [2, 2, 2], goal: 'clear', difficulty: 0.0, maxLen: 3 },
-  { name: 'Minik Dost', dims: [3, 3, 3], goal: 'rescue', difficulty: 0.2, maxLen: 4 },
-  { name: 'Küçük Küp', dims: [4, 4, 4], goal: 'clear', difficulty: 0.2, maxLen: 4 },
+  { name: 'İlk Adım', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.0, maxLen: 3 },
+  { name: 'Minik Dost', dims: [3, 4, 3], goal: 'rescue', difficulty: 0.2, maxLen: 4 },
+  { name: 'Küçük Küp', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.25, maxLen: 4 },
   { name: 'Kilitli Kafes', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.35, maxLen: 5 },
   { name: 'Uzun Kutu', dims: [3, 5, 3], goal: 'rescue', difficulty: 0.4, maxLen: 5 },
-  { name: 'Orta Küp', dims: [5, 5, 5], goal: 'clear', difficulty: 0.4, maxLen: 6 },
+  { name: 'Orta Küp', dims: [5, 5, 5], goal: 'rescue', difficulty: 0.45, maxLen: 6 },
   { name: 'Düğüm', dims: [5, 5, 5], goal: 'rescue', difficulty: 0.5, maxLen: 6 },
   { name: 'Dikdörtgen Prizma', dims: [4, 6, 4], goal: 'rescue', difficulty: 0.5, maxLen: 6 },
   { name: 'Yassı Prizma', dims: [6, 3, 6], goal: 'rescue', difficulty: 0.55, maxLen: 7 },
-  { name: 'Büyük Temizlik', dims: [6, 6, 6], goal: 'clear', difficulty: 0.55, maxLen: 7 },
+  { name: 'Altıgen Yol', dims: [6, 6, 6], goal: 'rescue', difficulty: 0.55, maxLen: 7 },
   { name: 'Labirent', dims: [6, 6, 6], goal: 'rescue', difficulty: 0.6, maxLen: 8 },
   { name: 'Kule', dims: [4, 8, 4], goal: 'rescue', difficulty: 0.6, maxLen: 8 },
   { name: 'Büyük Küp', dims: [7, 7, 7], goal: 'rescue', difficulty: 0.65, maxLen: 9 },
   { name: 'Tuğla', dims: [8, 4, 6], goal: 'rescue', difficulty: 0.7, maxLen: 9 },
-  { name: 'Dev Temizlik', dims: [7, 7, 7], goal: 'clear', difficulty: 0.7, maxLen: 9 },
+  { name: 'Kalın Duvar', dims: [7, 5, 7], goal: 'rescue', difficulty: 0.7, maxLen: 9 },
   { name: 'Dev Küp', dims: [8, 8, 8], goal: 'rescue', difficulty: 0.75, maxLen: 10 },
   { name: 'Gökdelen', dims: [5, 10, 5], goal: 'rescue', difficulty: 0.8, maxLen: 10 },
   { name: 'Usta Küp', dims: [9, 9, 9], goal: 'rescue', difficulty: 0.85, maxLen: 11 },
@@ -124,10 +125,9 @@ export function levelConfig(level) {
   // Sonsuz bölümler
   const k = n - HAND_LEVELS.length;
   const rnd = mulberry32(n * 7919);
-  const goal = k % 4 === 0 ? 'clear' : 'rescue';
+  const goal = 'rescue';
   const base = Math.min(10, 6 + Math.floor(k / 5));
   const dims = [0, 1, 2].map(() => base - 1 + Math.floor(rnd() * 4));
-  if (goal === 'clear') for (let i = 0; i < 3; i++) dims[i] = Math.min(dims[i], 8);
   const isCube = dims[0] === dims[1] && dims[1] === dims[2];
   return {
     level: n,
@@ -148,11 +148,13 @@ export function generatePuzzle(levelOrConfig, seed) {
   const cfg = typeof levelOrConfig === 'number' ? levelConfig(levelOrConfig) : levelOrConfig;
   const useSeed = seed ?? levelSeed(cfg.level ?? 1);
   let best = null;
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 30; attempt++) {
     const p = tryGenerate(cfg, (useSeed + attempt * 101) >>> 0);
     if (!p) continue;
     if (!best || p.quality > best.quality) best = p;
-    const enoughDepth = cfg.goal === 'clear' || p.required.length >= Math.min(p.arrows.length, 3 + p.arrows.length * 0.2);
+    // Zorluğa göre kaçış yolunun en az kaç ok gerektirmesi gerektiği
+    const target = Math.min(12, 1 + p.arrows.length * (0.05 + (cfg.difficulty ?? 0.4) * 0.12));
+    const enoughDepth = cfg.goal === 'clear' || p.required.length >= target;
     if (p.fill > 0.85 && enoughDepth) break;
   }
   if (!best) throw new Error('Bulmaca üretilemedi');
@@ -237,44 +239,51 @@ function tryGenerate(cfg, seed) {
 
   const fill = occupied.size / cells.length;
   const base = closures(dims, arrows, occupied);
-  let trap = [];
   let character = null;
   let list = arrows;
   let required;
 
   if (cfg.goal === 'rescue') {
-    // Karakteri EN ZOR noktaya koy: etrafını saran okları çıkarmak için önce en çok okun
-    // temizlenmesi gereken hücre. O hücredeki ok kaldırılır, karakter onun yerine oturur.
-    let best = null;
-    for (const X of arrows) {
-      for (const c of X.cells) {
-        const ringArrows = new Set();
-        for (const n of neighbors8(dims, c)) {
-          const o = occupied.get(cellKey(n));
-          if (o !== undefined && o !== X.id) ringArrows.add(o);
-        }
-        if (ringArrows.size < 3) continue;
-        const need = new Set();
-        for (const r of ringArrows) { need.add(r); for (const x of base[r]) need.add(x); }
-        need.delete(X.id);
-        const score = need.size + ringArrows.size * 0.3 - X.cells.length * 0.2 + rnd() * 0.1;
-        if (!best || score > best.score) best = { score, X, c };
+    // Karakter okların arasına sıkışmıştır. Herhangi bir yöne (yüzün kenarına kadar) düz yolu
+    // açılınca koşarak kaçar. Onu EN ZOR noktaya koyarız: en kolay kaçış yolunu açmak için bile
+    // en çok okun çıkması gereken hücre. O hücredeki ok kaldırılır, karakter onun yerine oturur.
+    // Karakter de bir engeldir: önünden geçmek isteyen oklar ona çarpar.
+    const crossing = new Map(); // hücre -> o hücreden geçen ışınlara sahip oklar
+    for (const a of arrows) {
+      for (const c of rayCells(dims, headOf(a), a.dir)) {
+        const k = cellKey(c);
+        if (!crossing.has(k)) crossing.set(k, []);
+        crossing.get(k).push(a.id);
       }
     }
-    if (!best) return null;
-    // X'i çıkar ve okları yeniden numarala (ekleme sırası korunur → çözülebilirlik bozulmaz).
-    list = arrows.filter((a) => a !== best.X).map((a, i) => ({ ...a, id: i }));
-    const occ = new Map();
-    for (const a of list) for (const c of a.cells) occ.set(cellKey(c), a.id);
-    const cl = closures(dims, list, occ);
-    const ring = neighbors8(dims, best.c);
-    const t = new Set();
-    for (const n of ring) { const o = occ.get(cellKey(n)); if (o !== undefined) t.add(o); }
-    trap = [...t].sort((a, b) => a - b);
-    const req = new Set();
-    for (const r of trap) { req.add(r); for (const x of cl[r]) req.add(x); }
-    required = [...req];
-    character = { cell: best.c, ring };
+    const candidates = [];
+    for (const X of arrows) {
+      for (const c of X.cells) {
+        const ck = cellKey(c);
+        const blockedByChar = new Set(crossing.get(ck) || []);
+        let cost = Infinity;
+        for (const d of tangentDirs(c.f)) {
+          const need = new Set();
+          for (const rc of rayCells(dims, c, d)) {
+            const o = occupied.get(cellKey(rc));
+            if (o === undefined || o === X.id) continue;
+            need.add(o);
+            for (const x of base[o]) need.add(x);
+          }
+          need.delete(X.id);
+          if ([...need].some((id) => blockedByChar.has(id))) continue; // bu yol karakter yüzünden açılamaz
+          cost = Math.min(cost, need.size);
+        }
+        if (cost === Infinity || cost === 0) continue;
+        candidates.push({ X, c, score: cost - X.cells.length * 0.1 + rnd() * 0.2 });
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    for (const cand of candidates.slice(0, 25)) {
+      const r = finalizeRescue(dims, arrows, cand.X, cand.c);
+      if (r) { ({ list, character, required } = r); break; }
+    }
+    if (!character) return null;
   } else {
     required = arrows.map((a) => a.id);
   }
@@ -291,23 +300,51 @@ function tryGenerate(cfg, seed) {
     seed,
     arrows: list,
     character,
-    trap,
     required: required.sort((a, b) => a - b),
     solution,
     fill,
-    quality: fill + (cfg.goal === 'rescue' ? required.length / list.length : 0),
+    quality: fill + (cfg.goal === 'rescue' ? required.length : 0),
   };
+}
+
+// Seçilen hücre için kesin hesap: X'i kaldır, okları yeniden numarala, kaçış yollarını bul.
+function finalizeRescue(dims, arrows, X, cell) {
+  const list = arrows.filter((a) => a !== X).map((a, i) => ({ ...a, id: i }));
+  const occ = new Map();
+  for (const a of list) for (const c of a.cells) occ.set(cellKey(c), a.id);
+  const cl = closures(dims, list, occ, cellKey(cell));
+  const escapes = [];
+  for (const d of tangentDirs(cell.f)) {
+    const need = new Set();
+    let ok = true;
+    for (const rc of rayCells(dims, cell, d)) {
+      const o = occ.get(cellKey(rc));
+      if (o === undefined) continue;
+      if (cl[o] === null) { ok = false; break; }
+      need.add(o);
+      for (const x of cl[o]) need.add(x);
+    }
+    if (ok) escapes.push({ dir: d, required: [...need].sort((a, b) => a - b) });
+  }
+  if (!escapes.length || escapes.some((e) => e.required.length === 0)) return null;
+  escapes.sort((a, b) => a.required.length - b.required.length);
+  return { list, character: { cell, escapes, cost: escapes[0].required.length }, required: escapes[0].required.slice() };
 }
 
 // Her ok için: onu serbest bırakmak için önce çıkması gereken tüm oklar (geçişli).
 // Engeller hep daha sonra eklenmiş oklardır, bu yüzden sondan başa tek geçiş yeter.
-function closures(dims, list, occupied) {
+// blockKey verilirse o hücre kalıcı engeldir (karakter): yolu oradan geçen ya da böyle bir oka
+// bağlı olan oklar için sonuç null olur (karakter kaçmadan çıkamazlar).
+function closures(dims, list, occupied, blockKey = null) {
   const out = new Array(list.length);
   for (let i = list.length - 1; i >= 0; i--) {
-    const s = new Set();
+    let s = new Set();
     for (const c of rayCells(dims, headOf(list[i]), list[i].dir)) {
-      const o = occupied.get(cellKey(c));
+      const k = cellKey(c);
+      if (k === blockKey) { s = null; break; }
+      const o = occupied.get(k);
       if (o === undefined) continue;
+      if (out[o] === null) { s = null; break; }
       s.add(o);
       for (const x of out[o]) s.add(x);
     }
@@ -340,46 +377,78 @@ export class PuzzleState {
     for (const a of puzzle.arrows) for (const c of a.cells) this.occupied.set(cellKey(c), a.id);
     this.removed = new Set();
     this.required = new Set(puzzle.required);
-    this.trap = new Set(puzzle.trap || []);
+    this.charKey = puzzle.character ? cellKey(puzzle.character.cell) : null;
+    this.rescued = !puzzle.character;
+    this.escapeDir = null;
   }
 
   get total() { return this.puzzle.arrows.length; }
   get remaining() { return this.total - this.removed.size; }
-  get solved() {
-    return this.puzzle.goal === 'rescue' ? this.trapLeft === 0 : this.removed.size === this.total;
+  get allCleared() { return this.removed.size === this.total; }
+  // Bölüm geçildi mi? (karakter kaçtı)
+  get solved() { return this.rescued; }
+
+  // Kaçış için en kısa yolda hâlâ çıkması gereken ok sayısı
+  get escapeCost() {
+    if (this.rescued) return 0;
+    let best = Infinity;
+    for (const e of this.puzzle.character.escapes) {
+      let n = 0;
+      for (const id of e.required) if (!this.removed.has(id)) n++;
+      best = Math.min(best, n);
+    }
+    return best === Infinity ? 0 : best;
   }
 
-  // Karakterin etrafında kalan (onu hapseden) ok sayısı
-  get trapLeft() {
-    let n = 0;
-    for (const id of this.trap) if (!this.removed.has(id)) n++;
-    return n;
-  }
-
-  // 0..1 ilerleme (VS çubuğu için): gerekli oklardan kaçı çıktı
+  // 0..1 ilerleme (VS çubuğu için)
   get progress() {
-    let n = 0;
-    for (const id of this.required) if (this.removed.has(id)) n++;
-    return n / this.required.size;
+    if (this.rescued) return 1;
+    const c0 = this.puzzle.character.cost || 1;
+    return Math.max(0, Math.min(0.99, 1 - this.escapeCost / c0));
   }
 
-  // Oku ucunun yönünde göndermeyi dener. { ok:true, exit } ya da { ok:false, hit, steps }
+  // Oku ucunun yönünde göndermeyi dener.
+  // { ok:true, rescued?: yön } ya da { ok:false, hit: okId | 'character', steps }
   tryMove(id) {
     if (this.removed.has(id)) return { ok: false, gone: true };
     const a = this.puzzle.arrows[id];
     const ray = rayCells(this.puzzle.dims, headOf(a), a.dir);
     for (let i = 0; i < ray.length; i++) {
-      const o = this.occupied.get(cellKey(ray[i]));
+      const k = cellKey(ray[i]);
+      if (!this.rescued && k === this.charKey) return { ok: false, hit: 'character', steps: i };
+      const o = this.occupied.get(k);
       if (o !== undefined) return { ok: false, hit: o, steps: i };
     }
     for (const c of a.cells) this.occupied.delete(cellKey(c));
     this.removed.add(id);
-    return { ok: true, exit: ray.length };
+    const res = { ok: true };
+    if (!this.rescued) {
+      const d = this.openEscape();
+      if (d !== null) {
+        this.rescued = true;
+        this.escapeDir = d;
+        res.rescued = d;
+      }
+    }
+    return res;
+  }
+
+  // Karakterin önünde kenara kadar açık bir yön var mı?
+  openEscape() {
+    const cell = this.puzzle.character.cell;
+    for (const d of tangentDirs(cell.f)) {
+      if (rayCells(this.puzzle.dims, cell, d).every((c) => !this.occupied.has(cellKey(c)))) return d;
+    }
+    return null;
   }
 
   isFree(id) {
     const a = this.puzzle.arrows[id];
-    return !this.removed.has(id) && rayCells(this.puzzle.dims, headOf(a), a.dir).every((c) => !this.occupied.has(cellKey(c)));
+    if (this.removed.has(id)) return false;
+    return rayCells(this.puzzle.dims, headOf(a), a.dir).every((c) => {
+      const k = cellKey(c);
+      return !this.occupied.has(k) && (this.rescued || k !== this.charKey);
+    });
   }
 
   arrowAt(cell) {
@@ -391,6 +460,11 @@ export class PuzzleState {
 // ---- Puanlama -----------------------------------------------------------------
 export function parTimeMs(puzzle) {
   return Math.round((4 + puzzle.required.length * 1.6) * 1000);
+}
+
+// Kurtardıktan sonra kalan tüm okları da bitirene bonus
+export function cleanBonus(puzzle) {
+  return puzzle.arrows.length * 15;
 }
 
 export function scoreFor(puzzle, timeMs, bumps) {

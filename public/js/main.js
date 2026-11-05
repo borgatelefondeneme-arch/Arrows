@@ -1,5 +1,5 @@
 // Ok Küp – arayüz ve oyun akışı.
-import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, BUMP_STUN_MS, HAND_LEVEL_COUNT } from './puzzle.js';
+import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, cleanBonus, BUMP_STUN_MS, HAND_LEVEL_COUNT } from './puzzle.js';
 import { GameScene } from './scene.js';
 import { Net } from './net.js';
 import * as storage from './storage.js';
@@ -34,7 +34,7 @@ function fmtTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}.${d}`;
 }
 
-const starsHtml = (n) => [1, 2, 3].map((i) => `<span class="${i <= n ? '' : 'off'}">⭐</span>`).join('');
+const starsHtml = (n) => [1, 2, 3].map((i) => `<span class="star ${i <= n ? 'on' : ''}">★</span>`).join('');
 
 let toastTimer;
 function toast(msg, ms = 2600) {
@@ -78,6 +78,7 @@ function renderHome() {
   $('#home-level').textContent = store.maxLevel;
   $('#home-stars').textContent = storage.totalStars(store);
   $('#home-score').textContent = storage.totalScore(store).toLocaleString('tr-TR');
+  $('#play-sub').textContent = `Bölüm ${store.maxLevel}`;
 }
 
 function renderLevels() {
@@ -89,9 +90,9 @@ function renderLevels() {
     const locked = lv > store.maxLevel;
     const best = store.best[lv];
     html += `<button class="level ${locked ? 'locked' : ''} ${lv === store.maxLevel ? 'current' : ''}" data-level="${lv}" ${locked ? 'disabled' : ''}>
-      <span class="num">${locked ? '🔒' : lv}</span>
-      <span class="name">${cfg.goal === 'rescue' ? '🐥' : '🧹'} ${esc(cfg.name)}<br>${cfg.dims.join('×')}</span>
-      <span class="stars">${best ? '⭐'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆'}</span>
+      <span class="num">${lv}</span>
+      <span class="name">${esc(cfg.name)}</span><span class="dims">${cfg.dims.join(' × ')}</span>
+      <span class="stars">${starsHtml(best?.stars || 0)}${best?.clean ? '<span class="gem" title="Tam temizlik">◆</span>' : ''}</span>
     </button>`;
   }
   grid.innerHTML = html;
@@ -142,13 +143,13 @@ $('#btn-friends').addEventListener('click', () => {
 $('#btn-howto').addEventListener('click', showHowTo);
 
 function showHowTo() {
-  showModal(`<div class="big-emoji">🧊➜🐥</div><h2>Nasıl oynanır?</h2>
+  showModal(`<h2>Nasıl oynanır?</h2>
     <ul class="howto">
       <li>Küpün yüzeyindeki bir <b>oka dokun</b>: ok sadece <b>ucunun gösterdiği yöne</b> kayar, gövdesi yolunu izler ve küpten çıkar.</li>
       <li>Ucunun önünde başka bir ok varsa <b>çarpar</b> ve geri döner — oklar birbirinin içinden geçemez. Çarpınca kısa süre sersemlersin!</li>
-      <li>🐥 bölümlerde tatlı dostun küpün <b>en zor noktasında</b>, pembe alandaki okların arasında kafeste. Onu saran okları temizle, kafes açılsın!</li>
-      <li>🧹 bölümlerde <b>tüm okları temizle</b>.</li>
-      <li>Ne kadar hızlı bitirirsen o kadar çok <b>puan</b> ve ⭐ alırsın. 💡 ipucu +5 sn ekler.</li>
+      <li>Minik dostun küpün <b>en zor noktasında okların arasına sıkışmış</b>. Önündeki dört yönden birinde kenara kadar yol açılınca koşarak kaçar ve bölüm geçilir.</li>
+      <li>Oklar dostunun içinden de geçemez. İstersen kurtardıktan sonra <b>kalan okları da bitir</b>, bonus puan ve ◆ kazan.</li>
+      <li>Ne kadar hızlı bitirirsen o kadar çok <b>puan</b> ve ★ alırsın. İpucu süreye 5 sn ekler.</li>
       <li>Bir parmakla kaydırarak küpü <b>her yöne çevir</b>, iki parmakla fotoğraf gibi <b>büyüt/küçült</b> ve kaydır. Boş yere çift dokununca görünüm sıfırlanır.</li>
       ${OFFLINE ? '' : '<li>⚔️ VS: arkadaşınla <b>ikinizin de açtığı ortak bir bölümde</b>, aynı bulmacada, aynı anda başlarsınız. Karakteri ilk kurtaran kazanır!</li>'}
     </ul>
@@ -259,8 +260,7 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     running: false, ended: false, bumps: 0, hints: 0, penaltyMs: 0,
     startTime: 0, stunUntil: 0, timerRaf: 0,
   };
-  $('#hud-level').textContent = `${mode === 'vs' ? '⚔️ ' : ''}Bölüm ${level} · ${puzzle.goal === 'rescue' ? '🐥 Dostunu kurtar!' : '🧹 Hepsini temizle!'}`;
-  $('#hud-unit').textContent = puzzle.goal === 'rescue' ? 'kafeste' : 'ok';
+  $('#hud-level').textContent = `${mode === 'vs' ? 'VS · ' : ''}Bölüm ${level} · ${puzzle.name}`;
   $('#hud-timer').textContent = fmtTime(0);
   $('#btn-hint').hidden = mode === 'vs';
   $('#vs-bar').hidden = mode !== 'vs';
@@ -276,7 +276,7 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     game.startTime = performance.now();
     tickTimer();
     if (level <= 2 && mode === 'solo') showTutorial();
-    if (level === 1 && mode === 'solo') setTimeout(() => toast('☝️ Bir parmakla çevir · 🤏 iki parmakla büyüt', 3200), 1800);
+    if (level === 1 && mode === 'solo') setTimeout(() => toast('Bir parmakla çevir · iki parmakla büyüt', 3200), 1800);
   });
 }
 
@@ -314,7 +314,9 @@ function tickTimer() {
 function updateHud() {
   if (!game) return;
   const { state } = game;
-  $('#hud-remaining').textContent = game.puzzle.goal === 'rescue' ? state.trapLeft : state.remaining;
+  const before = !state.rescued;
+  $('#hud-remaining').textContent = before ? state.escapeCost : state.remaining;
+  $('#hud-unit').textContent = before ? 'engel' : 'ok kaldı';
   if (game.mode === 'vs') $('#vs-me').style.width = `${100 * state.progress}%`;
 }
 
@@ -327,6 +329,7 @@ function onTap(id) {
     scene.animateRemove(id);
     sfx.whoosh();
     hideTutorial();
+    if (r.rescued !== undefined) scene.rescue(r.rescued);
   } else {
     scene.animateBump(id, r.steps, r.hit);
     sfx.bump();
@@ -338,7 +341,8 @@ function onTap(id) {
     const total = game.state.required.size;
     net.send('progress', { matchId: game.match.matchId, remaining: Math.round(total * (1 - game.state.progress)), total, bumps: game.bumps });
   }
-  if (game.state.solved) finishGame();
+  if (game.cleanup && game.state.allCleared) finishCleanup();
+  else if (game.state.solved && !game.rescueDone) finishGame();
 }
 
 $('#btn-reset-view').addEventListener('click', () => scene?.resetView());
@@ -353,7 +357,7 @@ $('#btn-hint').addEventListener('click', () => {
   scene.hint(pick.id);
   game.hints++;
   game.penaltyMs += HINT_PENALTY_MS;
-  toast('💡 Yanıp sönen ok serbest! (+5 sn)', 1600);
+  toast('Yanıp sönen ok serbest (+5 sn)', 1600);
 });
 
 $('#btn-quit').addEventListener('click', () => {
@@ -413,12 +417,12 @@ function finishGame() {
   const g = game;
   const time = elapsed();
   g.running = false;
+  g.rescueDone = true;
   hideTutorial();
   cancelAnimationFrame(g.timerRaf);
   $('#stun').hidden = true;
   $('#hud-timer').textContent = fmtTime(time);
-  scene.celebrate();
-  sfx.win();
+  setTimeout(() => sfx.win(), 500);
 
   if (g.mode === 'vs') {
     g.myTime = time;
@@ -429,14 +433,15 @@ function finishGame() {
     return;
   }
 
-  g.ended = true;
   const { score, stars, par } = scoreFor(g.puzzle, time, g.bumps);
+  g.score = score;
   const prev = store.best[g.level];
   const isRecord = !prev || time < prev.timeMs;
   store.best[g.level] = {
     timeMs: Math.min(time, prev?.timeMs ?? Infinity),
     stars: Math.max(stars, prev?.stars ?? 0),
     score: Math.max(score, prev?.score ?? 0),
+    clean: prev?.clean || false,
   };
   const unlockedNew = g.level >= store.maxLevel;
   store.maxLevel = Math.max(store.maxLevel, g.level + 1);
@@ -445,7 +450,8 @@ function finishGame() {
 
   setTimeout(() => {
     if (game !== g) return;
-    showModal(`<div class="big-emoji">🐥💛</div>
+    const left = g.state.remaining;
+    showModal(`<div class="big-emoji">🐥</div>
       <h2>Kurtarıldı!</h2>
       <div class="stars">${starsHtml(stars)}</div>
       ${isRecord && prev ? '<p class="new-record">Yeni rekor!</p>' : ''}
@@ -455,17 +461,59 @@ function finishGame() {
         <div><b>${g.bumps}</b><small>Çarpma</small></div>
         <div><b>${fmtTime(store.best[g.level].timeMs)}</b><small>En iyi</small></div>
       </div>
-      <p>3 yıldız için hedef: ${fmtTime(par)}${unlockedNew ? ' · Yeni bölüm açıldı! 🔓' : ''}</p>
+      <p>3 yıldız için hedef: ${fmtTime(par)}${unlockedNew ? ' · Yeni bölüm açıldı' : ''}</p>
       <div class="actions">
-        <button class="btn primary" data-action="next">Sonraki bölüm ▶</button>
-        <button class="btn" data-action="retry">Tekrar dene ↻</button>
-        <button class="btn ghost" style="color:var(--muted)" data-action="menu">Bölümler</button>
+        <button class="btn primary" data-action="next">Sonraki bölüm</button>
+        ${left ? `<button class="btn" data-action="clean">Kalan ${left} oku da bitir <span class="bonus">+${cleanBonus(g.puzzle)} puan</span></button>` : ''}
+        <div class="row-actions">
+          <button class="btn ghost" data-action="retry">Tekrar oyna</button>
+          <button class="btn ghost" data-action="menu">Bölümler</button>
+        </div>
       </div>`, {
       next: () => startSolo(g.level + 1),
+      clean: () => {
+        // Kurtardıktan sonra kalan okları da temizle (süre artık önemli değil).
+        closeModal();
+        g.cleanup = true;
+        g.running = true;
+        $('#hud-timer').textContent = 'Temizlik';
+        updateHud();
+      },
       retry: () => startSolo(g.level),
       menu: () => { closeModal(); show('levels', { push: false }); },
     });
-  }, 1500);
+  }, 2600);
+}
+
+// Kurtardıktan sonra bütün oklar da bitti: bonus
+function finishCleanup() {
+  const g = game;
+  g.running = false;
+  g.ended = true;
+  scene.allCleared();
+  sfx.win();
+  const bonus = cleanBonus(g.puzzle);
+  const best = store.best[g.level] || {};
+  const firstClean = !best.clean;
+  store.best[g.level] = { ...best, clean: true, score: Math.max(best.score || 0, (g.score || 0) + bonus) };
+  persist();
+  setTimeout(() => {
+    if (game !== g) return;
+    showModal(`<div class="big-emoji">💎</div>
+      <h2>Tam temizlik</h2>
+      <p>Küpte tek ok kalmadı. ${firstClean ? 'Bu bölümde ilk kez!' : ''}</p>
+      <div class="result-grid">
+        <div><b>+${bonus.toLocaleString('tr-TR')}</b><small>Bonus</small></div>
+        <div><b>${((g.score || 0) + bonus).toLocaleString('tr-TR')}</b><small>Toplam</small></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" data-action="next">Sonraki bölüm</button>
+        <button class="btn ghost" data-action="menu">Bölümler</button>
+      </div>`, {
+      next: () => startSolo(g.level + 1),
+      menu: () => { closeModal(); show('levels', { push: false }); },
+    });
+  }, 1200);
 }
 
 // ---- Ağ -------------------------------------------------------------------

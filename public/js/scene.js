@@ -3,8 +3,12 @@
 import * as THREE from 'three';
 import { DIRS, axisOf, rayCells, headOf } from './puzzle.js';
 
-const ARROW_COLOR = '#2b2350';
-const TRAP_COLOR = '#ff6b9a';
+// Palet: porselen küp, mürekkep oklar, mercan/kehribar vurgular
+const ARROW_COLOR = '#1f2a37';
+const TRAP_COLOR = '#ff7a59';
+const BUMP_COLOR = '#ff7a59';
+const BLOCKER_COLOR = '#f4b860';
+const HINT_COLOR = '#2fbf9b';
 const LINE_W = 0.2;
 const HEAD_W = 0.3;
 const HEAD_L = 0.36;
@@ -91,11 +95,11 @@ function faceTexture(cols, rows) {
   cv.height = rows * px;
   const ctx = cv.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, cv.width, cv.height);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(1, '#f1eeff');
+  g.addColorStop(0, '#f6f7f9');
+  g.addColorStop(1, '#e6eaef');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = 'rgba(108, 92, 231, 0.28)';
+  ctx.fillStyle = 'rgba(31, 42, 55, 0.18)';
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       ctx.beginPath();
@@ -112,7 +116,7 @@ function faceTexture(cols, rows) {
 // ---- Karakter, asma kilit, kafes ------------------------------------------
 function makeCharacter() {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffd54f', roughness: 0.5 });
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffc45c', roughness: 0.45 });
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 24), bodyMat);
   body.scale.set(1, 0.92, 1);
   g.add(body);
@@ -122,21 +126,34 @@ function makeCharacter() {
     ear.position.set(0.15 * s, 0.27, 0);
     ear.rotation.z = -0.35 * s;
     g.add(ear);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), new THREE.MeshStandardMaterial({ color: '#2b2350', roughness: 0.3 }));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), new THREE.MeshStandardMaterial({ color: '#1f2a37', roughness: 0.3 }));
     eye.position.set(0.1 * s, 0.05, 0.26);
     g.add(eye);
     const shine = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
     shine.position.set(0.1 * s + 0.018, 0.075, 0.31);
     g.add(shine);
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: '#ff8a80', roughness: 0.8 }));
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: '#ff8f70', roughness: 0.8 }));
     cheek.scale.set(1, 0.6, 0.4);
     cheek.position.set(0.19 * s, -0.04, 0.23);
     g.add(cheek);
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 8, 16, Math.PI), new THREE.MeshBasicMaterial({ color: '#2b2350' }));
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 8, 16, Math.PI), new THREE.MeshBasicMaterial({ color: '#1f2a37' }));
   mouth.position.set(0, -0.05, 0.285);
   mouth.rotation.z = Math.PI;
   g.add(mouth);
+  return g;
+}
+
+// Sıkıştığı için terleyen damla
+function makeSweat() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: '#8fd3ff', roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.9 });
+  const drop = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), mat);
+  drop.scale.set(1, 1.3, 1);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.07, 12), mat);
+  tip.position.y = 0.075;
+  g.add(drop, tip);
+  g.position.set(0.27, 0.2, 0.12);
   return g;
 }
 
@@ -212,7 +229,7 @@ export class GameScene {
     this.pan = new THREE.Vector2(0, 0);
     this.spin = { vx: 0, vy: 0 }; // bırakınca süzülerek dönmeye devam etsin
 
-    this.scene.add(new THREE.HemisphereLight('#ffffff', '#b8b0ff', 2.2));
+    this.scene.add(new THREE.HemisphereLight('#ffffff', '#9fb4c7', 2.1));
     const sun = new THREE.DirectionalLight('#ffffff', 1.0);
     sun.position.set(4, 10, 7);
     this.scene.add(sun);
@@ -248,7 +265,7 @@ export class GameScene {
     this.box = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), mats);
     this.box.position.set(W / 2, H / 2, D / 2);
     this.world.add(this.box);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.box.geometry), new THREE.LineBasicMaterial({ color: '#c8c0f0' }));
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.box.geometry), new THREE.LineBasicMaterial({ color: '#c3ccd6' }));
     edges.position.copy(this.box.position);
     this.world.add(edges);
 
@@ -268,10 +285,8 @@ export class GameScene {
     this.freed = false;
     this.charFlying = false;
     if (puzzle.goal === 'rescue' && puzzle.character) {
-      // En zor noktada, okların arasında küçük bir kafeste.
+      // En zor noktada, okların arasına sıkışmış (kafes yok).
       const cell = puzzle.character.cell;
-      this.patch = trapPatch(puzzle.character.ring, null, null);
-      this.world.add(this.patch);
       const n = N[cell.f];
       const holder = new THREE.Group();
       holder.position.copy(v3(cell.c)).addScaledVector(n, 0.01);
@@ -279,13 +294,11 @@ export class GameScene {
       const up = Math.abs(n.y) > 0.5 ? new THREE.Vector3(0, 0, -n.y) : new THREE.Vector3(0, 1, 0);
       const xAxis = new THREE.Vector3().crossVectors(up, n);
       holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, up, n));
-      this.character.scale.setScalar(0.95);
+      this.character.scale.setScalar(1.0);
       this.character.position.z = 0.3;
-      this.cage = makeCage();
-      this.cage.scale.setScalar(0.98);
-      this.cage.rotation.x = Math.PI / 2;
-      this.cage.position.z = 0.45;
-      holder.add(this.character, this.cage);
+      this.sweat = makeSweat();
+      this.character.add(this.sweat);
+      holder.add(this.character);
       this.world.add(holder);
       this.holder = holder;
       this.charMode = 'surface';
@@ -543,9 +556,10 @@ export class GameScene {
     const travel = steps + 0.12;
     const t1 = 110 + steps * 55;
     this.tween(t1, (t) => this.setShift(e, easeInQuad(t) * travel), () => {
-      this.flash(e, '#ff7675', 380);
+      this.flash(e, BUMP_COLOR, 380);
       const other = this.arrows.get(hitId);
-      if (other) this.flash(other, '#fdcb6e', 380);
+      if (other) this.flash(other, BLOCKER_COLOR, 380);
+      else if (hitId === 'character') this.flinch();
       this.tween(220 + steps * 40, (t) => this.setShift(e, (1 - easeOutCubic(t)) * travel));
     });
   }
@@ -562,7 +576,7 @@ export class GameScene {
     let n = 0;
     const blink = () => {
       if (!this.arrows.has(id)) return;
-      e.mat.color.set(n % 2 === 0 ? '#00cec9' : e.color);
+      e.mat.color.set(n % 2 === 0 ? HINT_COLOR : e.color);
       if (++n < 7) setTimeout(blink, 180);
     };
     blink();
@@ -582,6 +596,38 @@ export class GameScene {
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }
 
+  // Oklar karakterin önündeki yolu açtı: o yönde koşarak kenara gider, sonra sevinçle zıplar.
+  rescue(dir) {
+    if (this.charMode !== 'surface') { this.celebrate(); return; }
+    this.charMode = 'running';
+    if (this.sweat) this.sweat.visible = false;
+    const cell = this.puzzle.character.cell;
+    const k = rayCells(this.puzzle.dims, cell, dir).length;
+    const t = N[dir];
+    const from = this.holder.position.clone();
+    const dist = k + 0.75;
+    const ch = this.character;
+    // Koştuğu yöne baksın
+    const dirLocal = t.clone().applyQuaternion(this.holder.quaternion.clone().invert());
+    ch.rotation.set(0, 0, 0);
+    ch.lookAt(this.holder.localToWorld(dirLocal.clone().multiplyScalar(3).add(ch.position)));
+    const dur = 260 + dist * 120;
+    this.tween(dur, (p) => {
+      this.holder.position.copy(from).addScaledVector(t, p * dist);
+      ch.position.z = 0.3 + Math.abs(Math.sin(p * dist * Math.PI)) * 0.25;
+    }, () => { this.charMode = 'surface-done'; this.celebrate(); });
+  }
+
+  // Karakter isabet alınca irkilir.
+  flinch() {
+    this.flinchUntil = performance.now() + 450;
+  }
+
+  // Kurtardıktan sonra bütün okları da bitirince
+  allCleared() {
+    this.spawnConfetti(new THREE.Vector3(this.pan.x, this.pan.y, Math.min(this.radius * 0.7 + 1, this.dist * 0.45)), this.scene);
+  }
+
   // Karakter kurtuldu!
   celebrate() {
     this.freed = true;
@@ -591,14 +637,14 @@ export class GameScene {
       this.tween(700, (t) => { cage.scale.setScalar(1 + t * 0.8); cage.userData.mat.opacity = 1 - t; }, () => { cage.visible = false; });
     }
     if (this.patch) this.tween(600, (t) => { this.patch.material.opacity = 0.28 * (1 - t); });
-    if (this.charMode === 'surface') {
+    if (this.charMode === 'surface' || this.charMode === 'surface-done') {
       const start = ch.getWorldPosition(new THREE.Vector3());
       const s0 = ch.getWorldScale(new THREE.Vector3()).x;
       this.holder.remove(ch);
       this.scene.add(ch);
       ch.position.copy(start);
       ch.scale.setScalar(s0);
-      // Kafesten çıkıp ekrana doğru zıplasın ve kutunun önünde sevinsin.
+      // Küpten çıkıp ekrana doğru zıplasın ve kutunun önünde sevinsin.
       const goal = new THREE.Vector3(this.pan.x, this.pan.y, Math.min(this.radius * 0.7 + 1, this.dist * 0.45));
       this.charHome = goal;
       const s1 = Math.max(1.1, this.radius * 0.3);
@@ -626,7 +672,7 @@ export class GameScene {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const vel = [];
-    const palette = ['#ff8a80', '#ffb74d', '#81c784', '#4fc3f7', '#ba68c8', '#ff6b9a'].map((c) => new THREE.Color(c));
+    const palette = ['#ff7a59', '#f4b860', '#2fbf9b', '#6cb4ee', '#ffc45c', '#f2f4f7'].map((c) => new THREE.Color(c));
     for (let i = 0; i < count; i++) {
       pos.set([at.x, at.y, at.z], i * 3);
       const c = palette[i % palette.length];
@@ -664,14 +710,23 @@ export class GameScene {
     const ch = this.character;
     if (ch) {
       if (this.charMode === 'surface') {
-        // Kafeste hafifçe zıplayıp sağa sola bakar, hep kameraya dönük.
-        ch.position.z = 0.3 + Math.abs(Math.sin(t * 3)) * 0.07;
-        ch.lookAt(this.camera.position); // tatlı yüzü hep oyuncuya baksın
-        ch.rotateZ(Math.sin(t * 2.1) * 0.12);
+        // Okların arasında sıkışmış: biraz basık, titriyor, terliyor; yüzü hep oyuncuya dönük.
+        const flinch = (this.flinchUntil || 0) > now;
+        ch.position.z = 0.28;
+        ch.position.x = Math.sin(t * (flinch ? 60 : 22)) * (flinch ? 0.05 : 0.012);
+        ch.lookAt(this.camera.position);
+        ch.rotateZ(Math.sin(t * 2.1) * 0.08);
+        const sq = flinch ? 0.8 : 0.9 + Math.sin(t * 3) * 0.02;
+        ch.scale.set(0.95 * (2 - sq) * 0.55 + 0.95 * 0.45, 0.95 * sq, 0.95);
+        if (this.sweat) {
+          const ph = (t * 0.8) % 1;
+          this.sweat.position.y = 0.2 - ph * 0.25;
+          this.sweat.children.forEach((m) => { m.material.opacity = ph < 0.8 ? 0.9 : (1 - ph) * 4.5; });
+        }
       } else if (this.charMode === 'cage') {
         ch.position.y = this.charHome.y + Math.sin(t * 2.4) * 0.04;
         ch.lookAt(this.camera.position);
-      } else if (!this.charFlying) {
+      } else if ((this.charMode === 'free' || this.charMode === 'free-cage') && !this.charFlying && this.charHome) {
         ch.position.y = this.charHome.y + Math.abs(Math.sin(t * 5)) * 0.45;
         ch.lookAt(this.camera.position);
         ch.rotateZ(Math.sin(t * 10) * 0.25);

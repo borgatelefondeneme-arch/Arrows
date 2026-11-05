@@ -19,16 +19,16 @@ npm run build:offline   # → dist/ok-kup.html (Three.js dahil her şey tek dosy
   yüzün kenarından uçup gider.
 - Ucunun önünde başka bir ok varsa **çarpar** ve geri döner (oklar birbirinin içinden geçemez).
   Çarpınca 1 sn sersemlersin.
-- 🐥 **Dostunu kurtar** bölümleri: karakter yüzeyin **en zor noktasında** (çıkması için en çok okun
-  temizlenmesi gereken yerde), pembe işaretli alanda okların arasında bir kafeste. Onu saran
-  okların hepsi çıkınca kafes açılır ve karakter kurtulur.
-- 🧹 **Hepsini temizle** bölümleri: tüm oklar çıkınca kutunun üstündeki kafes açılır.
+- Minik dost yüzeyin **en zor noktasında okların arasına sıkışmış** (kafes yok). Dört yönünden
+  birinde yüzün kenarına kadar düz yol açılınca o yönden koşarak kaçar ve **bölüm geçilir**.
+  Karakter de engeldir: oklar onun içinden geçemez.
+- Kurtardıktan sonra istersen **kalan okları da bitir**: bonus puan ve bölüm listesinde ◆ işareti.
 - **Puan** bitirme süresine göre: hızlı = çok puan + 3 ⭐. 💡 ipucu +5 sn ekler.
 - Tek parmakla kaydırarak küpü **her yöne serbestçe çevir** (bırakınca süzülür), iki parmakla
   fotoğraf gibi **büyüt/küçült ve kaydır**. Boş yere çift dokunmak ya da ⟲ görünümü sıfırlar.
 
 ## Bölümler
-20 el yapımı bölüm kolaydan zora gider (2×2×2 öğretici küpten 10×10×10 efsane küpe; arada
+20 el yapımı bölüm kolaydan zora gider (4×4×4 öğretici küpten 10×10×10 efsane küpe; arada
 4×6×4, 6×3×6, 4×8×4, 8×4×6, 5×10×5, 10×6×8 gibi dikdörtgen prizmalar), sonra sonsuz bölümler
 gelir. Oklar tersten üretilir, bu yüzden **her bölümün çözümü vardır ve asla kilitlenmez**
 (bkz. `public/js/puzzle.js`).
