@@ -9,9 +9,9 @@ const TRAP_COLOR = '#ff7a59';
 const BUMP_COLOR = '#ff7a59';
 const BLOCKER_COLOR = '#f4b860';
 const HINT_COLOR = '#2fbf9b';
-const LINE_W = 0.2;
-const HEAD_W = 0.3;
-const HEAD_L = 0.36;
+const LINE_W = 0.13;
+const HEAD_W = 0.21;
+const HEAD_L = 0.3;
 const LIFT = 0.012;
 
 const N = DIRS.map((d) => new THREE.Vector3(...d));
@@ -298,7 +298,13 @@ export class GameScene {
       this.character.position.z = 0.3;
       this.sweat = makeSweat();
       this.character.add(this.sweat);
-      holder.add(this.character);
+      // Büyük küplerde de kolay bulunsun diye yüzeyde atan mercan halka
+      this.halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.62, 0.78, 48),
+        new THREE.MeshBasicMaterial({ color: TRAP_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      this.halo.position.z = 0.02;
+      holder.add(this.character, this.halo);
       this.world.add(holder);
       this.holder = holder;
       this.charMode = 'surface';
@@ -319,7 +325,8 @@ export class GameScene {
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
     this.baseDistance = (fit / Math.sin(Math.min(vHalf, hHalf))) * 1.0 + 0.3;
-    this.minDist = radius + 1.2; // kamera hiçbir zaman küpün içine girmesin
+    // Yüzlere iyice yaklaşılabilsin ama kamera küpün içine girmesin
+    this.minDist = (Math.max(W, H, D) / 2) * 1.35 + 1.2;
     this.maxDist = this.baseDistance * 2.5;
     this.homeQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, -0.65, 0, 'XYZ'));
     if (this.charMode === 'surface') {
@@ -346,6 +353,7 @@ export class GameScene {
     this.cage = null;
     this.holder = null;
     this.patch = null;
+    this.halo = null;
   }
 
   setShift(entry, s) {
@@ -601,6 +609,7 @@ export class GameScene {
     if (this.charMode !== 'surface') { this.celebrate(); return; }
     this.charMode = 'running';
     if (this.sweat) this.sweat.visible = false;
+    if (this.halo) this.halo.visible = false;
     const cell = this.puzzle.character.cell;
     const k = rayCells(this.puzzle.dims, cell, dir).length;
     const t = N[dir];
@@ -717,7 +726,15 @@ export class GameScene {
         ch.lookAt(this.camera.position);
         ch.rotateZ(Math.sin(t * 2.1) * 0.08);
         const sq = flinch ? 0.8 : 0.9 + Math.sin(t * 3) * 0.02;
-        ch.scale.set(0.95 * (2 - sq) * 0.55 + 0.95 * 0.45, 0.95 * sq, 0.95);
+        const base = 1.15;
+        ch.scale.set(base * ((2 - sq) * 0.55 + 0.45), base * sq, base);
+        if (this.halo) {
+          const ph = (t * 0.9) % 1;
+          // Uzaktayken halka büyür ki küçük karakter gözden kaçmasın
+          const far = THREE.MathUtils.clamp(this.dist / 18, 1, 2.6);
+          this.halo.scale.setScalar(far * (1 + ph * 0.9));
+          this.halo.material.opacity = 0.85 * (1 - ph);
+        }
         if (this.sweat) {
           const ph = (t * 0.8) % 1;
           this.sweat.position.y = 0.2 - ph * 0.25;

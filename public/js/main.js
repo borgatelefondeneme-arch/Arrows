@@ -148,7 +148,7 @@ function showHowTo() {
       <li>Küpün yüzeyindeki bir <b>oka dokun</b>: ok sadece <b>ucunun gösterdiği yöne</b> kayar, gövdesi yolunu izler ve küpten çıkar.</li>
       <li>Ucunun önünde başka bir ok varsa <b>çarpar</b> ve geri döner — oklar birbirinin içinden geçemez. Çarpınca kısa süre sersemlersin!</li>
       <li>Minik dostun küpün <b>en zor noktasında okların arasına sıkışmış</b>. Önündeki dört yönden birinde kenara kadar yol açılınca koşarak kaçar ve bölüm geçilir.</li>
-      <li>Oklar dostunun içinden de geçemez. İstersen kurtardıktan sonra <b>kalan okları da bitir</b>, bonus puan ve ◆ kazan.</li>
+      <li>Oklar dostunun içinden de geçemez. Kurtarınca köşedeki <b>Sonraki bölüm</b> ile devam et ya da kalan okları da bitirip bonus ve ◆ kazan.</li>
       <li>Ne kadar hızlı bitirirsen o kadar çok <b>puan</b> ve ★ alırsın. İpucu süreye 5 sn ekler.</li>
       <li>Bir parmakla kaydırarak küpü <b>her yöne çevir</b>, iki parmakla fotoğraf gibi <b>büyüt/küçült</b> ve kaydır. Boş yere çift dokununca görünüm sıfırlanır.</li>
       ${OFFLINE ? '' : '<li>⚔️ VS: arkadaşınla <b>ikinizin de açtığı ortak bir bölümde</b>, aynı bulmacada, aynı anda başlarsınız. Karakteri ilk kurtaran kazanır!</li>'}
@@ -260,6 +260,9 @@ function beginGame({ puzzle, mode, level, match = null, startIn = 3000 }) {
     running: false, ended: false, bumps: 0, hints: 0, penaltyMs: 0,
     startTime: 0, stunUntil: 0, timerRaf: 0,
   };
+  $('#btn-next').hidden = true;
+  $('#btn-next').classList.remove('pulse');
+  $('#result-strip').hidden = true;
   $('#hud-level').textContent = `${mode === 'vs' ? 'VS · ' : ''}Bölüm ${level} · ${puzzle.name}`;
   $('#hud-timer').textContent = fmtTime(0);
   $('#btn-hint').hidden = mode === 'vs';
@@ -405,6 +408,8 @@ function hideTutorial() {
 
 function stopGame() {
   hideTutorial();
+  $('#btn-next').hidden = true;
+  $('#result-strip').hidden = true;
   if (!game) return;
   game.running = false;
   game.ended = true;
@@ -448,44 +453,24 @@ function finishGame() {
   persist();
   net.send('setProgress', { maxLevel: store.maxLevel });
 
-  setTimeout(() => {
-    if (game !== g) return;
-    const left = g.state.remaining;
-    showModal(`<div class="big-emoji">🐥</div>
-      <h2>Kurtarıldı!</h2>
-      <div class="stars">${starsHtml(stars)}</div>
-      ${isRecord && prev ? '<p class="new-record">Yeni rekor!</p>' : ''}
-      <div class="result-grid">
-        <div><b>${fmtTime(time)}</b><small>Süre</small></div>
-        <div><b>${score.toLocaleString('tr-TR')}</b><small>Puan</small></div>
-        <div><b>${g.bumps}</b><small>Çarpma</small></div>
-        <div><b>${fmtTime(store.best[g.level].timeMs)}</b><small>En iyi</small></div>
-      </div>
-      <p>3 yıldız için hedef: ${fmtTime(par)}${unlockedNew ? ' · Yeni bölüm açıldı' : ''}</p>
-      <div class="actions">
-        <button class="btn primary" data-action="next">Sonraki bölüm</button>
-        ${left ? `<button class="btn" data-action="clean">Kalan ${left} oku da bitir <span class="bonus">+${cleanBonus(g.puzzle)} puan</span></button>` : ''}
-        <div class="row-actions">
-          <button class="btn ghost" data-action="retry">Tekrar oyna</button>
-          <button class="btn ghost" data-action="menu">Bölümler</button>
-        </div>
-      </div>`, {
-      next: () => startSolo(g.level + 1),
-      clean: () => {
-        // Kurtardıktan sonra kalan okları da temizle (süre artık önemli değil).
-        closeModal();
-        g.cleanup = true;
-        g.running = true;
-        $('#hud-timer').textContent = 'Temizlik';
-        updateHud();
-      },
-      retry: () => startSolo(g.level),
-      menu: () => { closeModal(); show('levels', { push: false }); },
-    });
-  }, 2600);
+  // Soru sormadan devam: üstte kısa bir sonuç şeridi, köşede "Sonraki bölüm" düğmesi.
+  // Oyuncu isterse kalan oklarla oynamayı sürdürür; hepsini bitirirse bonus alır.
+  g.cleanup = true;
+  g.running = true;
+  $('#hud-timer').textContent = fmtTime(time);
+  $('#btn-next').hidden = false;
+  const strip = $('#result-strip');
+  strip.innerHTML = `<span class="rs-title">Kurtarıldı</span>
+    <span class="rs-stars">${starsHtml(stars)}</span>
+    <span class="rs-meta">${fmtTime(time)} · ${score.toLocaleString('tr-TR')} puan${isRecord && prev ? ' · rekor' : ''}${unlockedNew ? ' · yeni bölüm açıldı' : ''}</span>`;
+  strip.hidden = false;
+  strip.classList.remove('show');
+  void strip.offsetWidth;
+  strip.classList.add('show');
+  updateHud();
 }
 
-// Kurtardıktan sonra bütün oklar da bitti: bonus
+// Kurtardıktan sonra bütün oklar da bitti: bonus (soru yok, sadece bildirim)
 function finishCleanup() {
   const g = game;
   g.running = false;
@@ -494,27 +479,17 @@ function finishCleanup() {
   sfx.win();
   const bonus = cleanBonus(g.puzzle);
   const best = store.best[g.level] || {};
-  const firstClean = !best.clean;
   store.best[g.level] = { ...best, clean: true, score: Math.max(best.score || 0, (g.score || 0) + bonus) };
   persist();
-  setTimeout(() => {
-    if (game !== g) return;
-    showModal(`<div class="big-emoji">💎</div>
-      <h2>Tam temizlik</h2>
-      <p>Küpte tek ok kalmadı. ${firstClean ? 'Bu bölümde ilk kez!' : ''}</p>
-      <div class="result-grid">
-        <div><b>+${bonus.toLocaleString('tr-TR')}</b><small>Bonus</small></div>
-        <div><b>${((g.score || 0) + bonus).toLocaleString('tr-TR')}</b><small>Toplam</small></div>
-      </div>
-      <div class="actions">
-        <button class="btn primary" data-action="next">Sonraki bölüm</button>
-        <button class="btn ghost" data-action="menu">Bölümler</button>
-      </div>`, {
-      next: () => startSolo(g.level + 1),
-      menu: () => { closeModal(); show('levels', { push: false }); },
-    });
-  }, 1200);
+  const strip = $('#result-strip');
+  strip.querySelector('.rs-title').textContent = 'Tam temizlik ◆';
+  strip.querySelector('.rs-meta').textContent = `+${bonus.toLocaleString('tr-TR')} bonus · toplam ${((g.score || 0) + bonus).toLocaleString('tr-TR')} puan`;
+  $('#btn-next').classList.add('pulse');
 }
+
+$('#btn-next').addEventListener('click', () => {
+  if (game) startSolo(game.level + 1);
+});
 
 // ---- Ağ -------------------------------------------------------------------
 const net = OFFLINE ? { connected: false, send: () => false, on: () => {} } : new Net();

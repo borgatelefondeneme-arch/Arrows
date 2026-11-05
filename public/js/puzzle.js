@@ -96,46 +96,44 @@ export const headOf = (arrow) => arrow.cells[arrow.cells.length - 1];
 // ---- Bölümler ---------------------------------------------------------------
 // goal: 'rescue' (kilit okunu çıkar, karakteri kurtar) | 'clear' (tüm okları temizle)
 const HAND_LEVELS = [
-  { name: 'İlk Adım', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.0, maxLen: 3 },
-  { name: 'Minik Dost', dims: [3, 4, 3], goal: 'rescue', difficulty: 0.2, maxLen: 4 },
-  { name: 'Küçük Küp', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.25, maxLen: 4 },
-  { name: 'Kilitli Kafes', dims: [4, 4, 4], goal: 'rescue', difficulty: 0.35, maxLen: 5 },
-  { name: 'Uzun Kutu', dims: [3, 5, 3], goal: 'rescue', difficulty: 0.4, maxLen: 5 },
-  { name: 'Orta Küp', dims: [5, 5, 5], goal: 'rescue', difficulty: 0.45, maxLen: 6 },
-  { name: 'Düğüm', dims: [5, 5, 5], goal: 'rescue', difficulty: 0.5, maxLen: 6 },
-  { name: 'Dikdörtgen Prizma', dims: [4, 6, 4], goal: 'rescue', difficulty: 0.5, maxLen: 6 },
-  { name: 'Yassı Prizma', dims: [6, 3, 6], goal: 'rescue', difficulty: 0.55, maxLen: 7 },
-  { name: 'Altıgen Yol', dims: [6, 6, 6], goal: 'rescue', difficulty: 0.55, maxLen: 7 },
-  { name: 'Labirent', dims: [6, 6, 6], goal: 'rescue', difficulty: 0.6, maxLen: 8 },
-  { name: 'Kule', dims: [4, 8, 4], goal: 'rescue', difficulty: 0.6, maxLen: 8 },
-  { name: 'Büyük Küp', dims: [7, 7, 7], goal: 'rescue', difficulty: 0.65, maxLen: 9 },
-  { name: 'Tuğla', dims: [8, 4, 6], goal: 'rescue', difficulty: 0.7, maxLen: 9 },
-  { name: 'Kalın Duvar', dims: [7, 5, 7], goal: 'rescue', difficulty: 0.7, maxLen: 9 },
-  { name: 'Dev Küp', dims: [8, 8, 8], goal: 'rescue', difficulty: 0.75, maxLen: 10 },
-  { name: 'Gökdelen', dims: [5, 10, 5], goal: 'rescue', difficulty: 0.8, maxLen: 10 },
-  { name: 'Usta Küp', dims: [9, 9, 9], goal: 'rescue', difficulty: 0.85, maxLen: 11 },
-  { name: 'Dev Prizma', dims: [10, 6, 8], goal: 'rescue', difficulty: 0.9, maxLen: 12 },
-  { name: 'Efsane Küp', dims: [10, 10, 10], goal: 'rescue', difficulty: 0.9, maxLen: 12 },
-];
+  { name: 'İlk Adım', dims: [8, 8, 8], difficulty: 0.45, maxLen: 10 },
+  { name: 'Isınma', dims: [9, 9, 9], difficulty: 0.5, maxLen: 12 },
+  { name: 'Uzun Kutu', dims: [8, 11, 8], difficulty: 0.55, maxLen: 12 },
+  { name: 'Düğüm', dims: [10, 10, 10], difficulty: 0.6, maxLen: 14 },
+  { name: 'Tuğla', dims: [12, 8, 10], difficulty: 0.62, maxLen: 14 },
+  { name: 'Sarmal', dims: [11, 11, 11], difficulty: 0.66, maxLen: 16 },
+  { name: 'Labirent', dims: [12, 12, 12], difficulty: 0.7, maxLen: 16 },
+  { name: 'Kule', dims: [10, 15, 10], difficulty: 0.72, maxLen: 18 },
+  { name: 'Yassı Prizma', dims: [15, 8, 14], difficulty: 0.75, maxLen: 18 },
+  { name: 'Ağ', dims: [13, 13, 13], difficulty: 0.78, maxLen: 18 },
+  { name: 'Dolambaç', dims: [14, 14, 14], difficulty: 0.8, maxLen: 20 },
+  { name: 'Gökdelen', dims: [10, 18, 10], difficulty: 0.82, maxLen: 20 },
+  { name: 'Büyük Küp', dims: [15, 15, 15], difficulty: 0.84, maxLen: 20 },
+  { name: 'Dev Tuğla', dims: [17, 11, 15], difficulty: 0.86, maxLen: 22 },
+  { name: 'Dev Küp', dims: [16, 16, 16], difficulty: 0.88, maxLen: 22 },
+  { name: 'Kalın Duvar', dims: [18, 12, 16], difficulty: 0.9, maxLen: 24 },
+  { name: 'Uzun Gökdelen', dims: [12, 20, 12], difficulty: 0.9, maxLen: 24 },
+  { name: 'Usta Küp', dims: [17, 17, 17], difficulty: 0.92, maxLen: 24 },
+  { name: 'Dev Prizma', dims: [20, 14, 16], difficulty: 0.94, maxLen: 26 },
+  { name: 'Efsane Küp', dims: [18, 18, 18], difficulty: 0.95, maxLen: 26 },
+].map((l) => ({ goal: 'rescue', ...l }));
 export const HAND_LEVEL_COUNT = HAND_LEVELS.length;
 
 export function levelConfig(level) {
   const n = Math.max(1, Math.floor(level));
   if (n <= HAND_LEVELS.length) return { level: n, ...HAND_LEVELS[n - 1] };
-  // Sonsuz bölümler
+  // Sonsuz bölümler: 15-20 birimlik kutular, en zor ayarlar
   const k = n - HAND_LEVELS.length;
   const rnd = mulberry32(n * 7919);
-  const goal = 'rescue';
-  const base = Math.min(10, 6 + Math.floor(k / 5));
-  const dims = [0, 1, 2].map(() => base - 1 + Math.floor(rnd() * 4));
+  const dims = [0, 1, 2].map(() => 15 + Math.floor(rnd() * 6));
   const isCube = dims[0] === dims[1] && dims[1] === dims[2];
   return {
     level: n,
     name: `${isCube ? 'Küp' : 'Prizma'} ${n}`,
     dims,
-    goal,
-    difficulty: Math.min(0.95, 0.9 + k * 0.003),
-    maxLen: 12,
+    goal: 'rescue',
+    difficulty: 0.95,
+    maxLen: 26 + Math.min(6, Math.floor(k / 5)),
   };
 }
 
@@ -148,12 +146,15 @@ export function generatePuzzle(levelOrConfig, seed) {
   const cfg = typeof levelOrConfig === 'number' ? levelConfig(levelOrConfig) : levelOrConfig;
   const useSeed = seed ?? levelSeed(cfg.level ?? 1);
   let best = null;
-  for (let attempt = 0; attempt < 30; attempt++) {
+  // Büyük kutularda üretim pahalı: deneme sayısı boyuta göre (her cihazda aynı sonuç için sabit).
+  const cellCount = 2 * (cfg.dims[0] * cfg.dims[1] + cfg.dims[1] * cfg.dims[2] + cfg.dims[0] * cfg.dims[2]);
+  const maxAttempts = cellCount > 1200 ? 6 : cellCount > 600 ? 8 : 12;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const p = tryGenerate(cfg, (useSeed + attempt * 101) >>> 0);
     if (!p) continue;
     if (!best || p.quality > best.quality) best = p;
     // Zorluğa göre kaçış yolunun en az kaç ok gerektirmesi gerektiği
-    const target = Math.min(12, 1 + p.arrows.length * (0.05 + (cfg.difficulty ?? 0.4) * 0.12));
+    const target = Math.min(30, 1 + p.arrows.length * (0.05 + (cfg.difficulty ?? 0.4) * 0.12));
     const enoughDepth = cfg.goal === 'clear' || p.required.length >= target;
     if (p.fill > 0.85 && enoughDepth) break;
   }

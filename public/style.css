@@ -167,7 +167,7 @@ h1 {
 .hud { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 max(14px, var(--safe-right)) 0 max(14px, var(--safe-left)); pointer-events: none; }
 .hud > * { pointer-events: auto; }
 .hud.top { top: calc(var(--safe-top) + 10px); }
-.hud.bottom { bottom: calc(var(--safe-bottom) + 16px); justify-content: center; gap: 14px; }
+.hud.bottom { bottom: calc(var(--safe-bottom) + 16px); justify-content: flex-start; gap: 12px; }
 .hud.bottom .icon-btn { width: 52px; height: 52px; border-radius: 18px; }
 .hud-center { text-align: center; }
 .hud-level { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -255,3 +255,28 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .logo-mark, .tutorial .ring, .countdown span, .stun { animation: none; }
 }
+
+/* ---- Kurtarınca: sonuç şeridi + köşedeki Sonraki bölüm ---- */
+.result-strip {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 74px); transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px;
+  max-width: calc(100% - 32px); padding: 9px 16px; border-radius: 16px;
+  background: var(--card); color: var(--card-ink); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.result-strip.show { animation: drop .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes drop { from { transform: translate(-50%, -16px); opacity: 0; } }
+.rs-title { font-family: var(--font-display); font-weight: 800; font-size: 16px; }
+.rs-stars { font-size: 15px; letter-spacing: 2px; }
+.rs-stars .star { color: #d9d4ca; }
+.rs-stars .star.on { color: var(--gold); }
+.rs-meta { font-size: 13px; color: var(--card-muted); font-variant-numeric: tabular-nums; }
+.next-btn {
+  position: absolute; right: max(14px, var(--safe-right)); bottom: calc(var(--safe-bottom) + 16px);
+  padding: 13px 16px; font-size: 16px; border-radius: 18px; animation: drop2 .4s ease-out;
+}
+.next-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes drop2 { from { transform: translateY(20px); opacity: 0; } }
+.next-btn.pulse { animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 0 8px rgba(255, 122, 89, 0.25), 0 10px 30px rgba(255, 122, 89, 0.3); } }
+@media (prefers-reduced-motion: reduce) { .result-strip.show, .next-btn, .next-btn.pulse { animation: none; } }

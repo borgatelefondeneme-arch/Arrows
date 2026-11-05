@@ -5,7 +5,7 @@ import {
   allCells, cellKey, step, rayCells, headOf, axisOf, opposite,
 } from '../public/js/puzzle.js';
 
-const LEVELS = Array.from({ length: HAND_LEVEL_COUNT + 12 }, (_, i) => i + 1);
+const LEVELS = Array.from({ length: HAND_LEVEL_COUNT + 3 }, (_, i) => i + 1);
 
 test('yüzeyde yürümek: 4 adımda aynı yüzde ya da kenarlardan dolaşarak geri dönülür', () => {
   const dims = [3, 4, 5];

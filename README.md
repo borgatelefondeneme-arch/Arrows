@@ -22,16 +22,18 @@ npm run build:offline   # → dist/ok-kup.html (Three.js dahil her şey tek dosy
 - Minik dost yüzeyin **en zor noktasında okların arasına sıkışmış** (kafes yok). Dört yönünden
   birinde yüzün kenarına kadar düz yol açılınca o yönden koşarak kaçar ve **bölüm geçilir**.
   Karakter de engeldir: oklar onun içinden geçemez.
-- Kurtardıktan sonra istersen **kalan okları da bitir**: bonus puan ve bölüm listesinde ◆ işareti.
+- Kurtarınca soru çıkmaz: üstte kısa bir sonuç şeridi, köşede **Sonraki bölüm** düğmesi belirir.
+  İstersen kalan okları da bitir: bonus puan ve bölüm listesinde ◆ işareti.
 - **Puan** bitirme süresine göre: hızlı = çok puan + 3 ⭐. 💡 ipucu +5 sn ekler.
 - Tek parmakla kaydırarak küpü **her yöne serbestçe çevir** (bırakınca süzülür), iki parmakla
   fotoğraf gibi **büyüt/küçült ve kaydır**. Boş yere çift dokunmak ya da ⟲ görünümü sıfırlar.
 
 ## Bölümler
-20 el yapımı bölüm kolaydan zora gider (4×4×4 öğretici küpten 10×10×10 efsane küpe; arada
-4×6×4, 6×3×6, 4×8×4, 8×4×6, 5×10×5, 10×6×8 gibi dikdörtgen prizmalar), sonra sonsuz bölümler
-gelir. Oklar tersten üretilir, bu yüzden **her bölümün çözümü vardır ve asla kilitlenmez**
-(bkz. `public/js/puzzle.js`).
+20 el yapımı bölüm kolaydan zora gider: 8×8×8 başlangıç küpünden 18×18×18 efsane küpe, arada
+8×11×8, 12×8×10, 10×15×10, 15×8×14, 10×18×10, 20×14×16 gibi dikdörtgen prizmalar. Oklar ince ve
+uzun, kıvrılarak köşelerden komşu yüzlere geçer. Karakteri kurtarmak için gereken ok sayısı
+başlangıçta ~7, son bölümlerde 25+; sonra sonsuz bölümler gelir. Oklar tersten üretildiği için
+**her bölümün çözümü vardır ve asla kilitlenmez** (bkz. `public/js/puzzle.js`).
 
 ## VS (arkadaşınla düello)
 1. **Arkadaşlar & VS** ekranında adını yaz; 6 karakterlik **arkadaş kodunu** paylaş.
