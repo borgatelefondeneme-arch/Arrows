@@ -2,6 +2,7 @@
 // Çıktılar:
 //   dist/ok-kup.html          → telefona/bilgisayara kaydedilip açılabilen tam HTML
 //   dist/ok-kup-artifact.html → claude.ai Artifact olarak yayınlanan sürüm (doctype/head olmadan)
+//   docs/index.html           → GitHub Pages sayfası (dist/ok-kup.html ile aynı)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,4 +68,8 @@ ${scripts}
 fs.mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'dist', 'ok-kup.html'), full);
 fs.writeFileSync(path.join(ROOT, 'dist', 'ok-kup-artifact.html'), artifact);
+// GitHub Pages: docs/ klasörü doğrudan yayınlanır (Settings → Pages → Branch, /docs)
+fs.mkdirSync(path.join(ROOT, 'docs'), { recursive: true });
+fs.writeFileSync(path.join(ROOT, 'docs', 'index.html'), full);
+fs.writeFileSync(path.join(ROOT, 'docs', '.nojekyll'), '');
 console.log(`dist/ok-kup.html ${(full.length / 1024).toFixed(0)} KB`);

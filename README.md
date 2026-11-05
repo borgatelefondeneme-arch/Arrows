@@ -9,6 +9,9 @@ iPhone'da Safari'de çalışır; **Ana Ekrana Ekle** ile uygulama gibi tam ekran
 npm install
 npm run build:offline   # → dist/ok-kup.html (Three.js dahil her şey tek dosyada, ~580 KB)
 ```
+Aynı dosya `docs/index.html` olarak da yazılır; GitHub Pages bu klasörü yayınlar:
+**https://borgatelefondeneme-arch.github.io/Arrows/** (Settings → Pages → Deploy from a branch → `/docs`).
+
 `dist/ok-kup.html` hiçbir ağ isteği yapmaz. Bu sürümde VS/arkadaş özellikleri gizlidir
 (sunucu gerektirdikleri için); tek oyunculu bölümlerin hepsi çalışır, ilerleme cihazda saklanır.
 
