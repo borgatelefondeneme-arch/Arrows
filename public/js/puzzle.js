@@ -94,48 +94,45 @@ export function rayCells(dims, cell, t) {
 export const headOf = (arrow) => arrow.cells[arrow.cells.length - 1];
 
 // ---- Bölümler ---------------------------------------------------------------
-// goal: 'rescue' (kilit okunu çıkar, karakteri kurtar) | 'clear' (tüm okları temizle)
-const HAND_LEVELS = [
-  { name: 'İlk Adım', dims: [8, 8, 8], difficulty: 0.45, maxLen: 10 },
-  { name: 'Isınma', dims: [9, 9, 9], difficulty: 0.5, maxLen: 12 },
-  { name: 'Uzun Kutu', dims: [8, 11, 8], difficulty: 0.55, maxLen: 12 },
-  { name: 'Düğüm', dims: [10, 10, 10], difficulty: 0.6, maxLen: 14 },
-  { name: 'Tuğla', dims: [12, 8, 10], difficulty: 0.62, maxLen: 14 },
-  { name: 'Sarmal', dims: [11, 11, 11], difficulty: 0.66, maxLen: 16 },
-  { name: 'Labirent', dims: [12, 12, 12], difficulty: 0.7, maxLen: 16 },
-  { name: 'Kule', dims: [10, 15, 10], difficulty: 0.72, maxLen: 18 },
-  { name: 'Yassı Prizma', dims: [15, 8, 14], difficulty: 0.75, maxLen: 18 },
-  { name: 'Ağ', dims: [13, 13, 13], difficulty: 0.78, maxLen: 18 },
-  { name: 'Dolambaç', dims: [14, 14, 14], difficulty: 0.8, maxLen: 20 },
-  { name: 'Gökdelen', dims: [10, 18, 10], difficulty: 0.82, maxLen: 20 },
-  { name: 'Büyük Küp', dims: [15, 15, 15], difficulty: 0.84, maxLen: 20 },
-  { name: 'Dev Tuğla', dims: [17, 11, 15], difficulty: 0.86, maxLen: 22 },
-  { name: 'Dev Küp', dims: [16, 16, 16], difficulty: 0.88, maxLen: 22 },
-  { name: 'Kalın Duvar', dims: [18, 12, 16], difficulty: 0.9, maxLen: 24 },
-  { name: 'Uzun Gökdelen', dims: [12, 20, 12], difficulty: 0.9, maxLen: 24 },
-  { name: 'Usta Küp', dims: [17, 17, 17], difficulty: 0.92, maxLen: 24 },
-  { name: 'Dev Prizma', dims: [20, 14, 16], difficulty: 0.94, maxLen: 26 },
-  { name: 'Efsane Küp', dims: [18, 18, 18], difficulty: 0.95, maxLen: 26 },
-].map((l) => ({ goal: 'rescue', ...l }));
-export const HAND_LEVEL_COUNT = HAND_LEVELS.length;
+// ---- Bölümler: sonsuz --------------------------------------------------------
+// Her bölüm biraz daha büyük (daha sık ızgara = yüzeyde daha çok nokta ve ok) ve biraz daha zor.
+// Boyut belli bir sınıra kadar büyür; sonra zorluk ve ok uzunluğu en yüksekte kalarak sonsuza
+// kadar yeni bulmacalar gelir.
+export const MAX_SIZE = 24;
+
+const SHAPES = [
+  { name: 'Küp', f: [1, 1, 1] },
+  { name: 'Kule', f: [0.75, 1.3, 0.75] },
+  { name: 'Yassı Prizma', f: [1.2, 0.6, 1.1] },
+  { name: 'Tuğla', f: [1.25, 0.8, 0.95] },
+  { name: 'Küp', f: [1, 1, 1] },
+  { name: 'Uzun Prizma', f: [0.85, 1.05, 1.25] },
+];
 
 export function levelConfig(level) {
   const n = Math.max(1, Math.floor(level));
-  if (n <= HAND_LEVELS.length) return { level: n, ...HAND_LEVELS[n - 1] };
-  // Sonsuz bölümler: 15-20 birimlik kutular, en zor ayarlar
-  const k = n - HAND_LEVELS.length;
-  const rnd = mulberry32(n * 7919);
-  const dims = [0, 1, 2].map(() => 15 + Math.floor(rnd() * 6));
-  const isCube = dims[0] === dims[1] && dims[1] === dims[2];
+  // Hedef yüzey nokta sayısı her bölümde artar: 6·s² (s: 8'den MAX_SIZE'a)
+  const size = Math.min(MAX_SIZE, 8 + (n - 1) * 0.55);
+  const shape = SHAPES[(n - 1) % SHAPES.length];
+  const [a, b, c] = shape.f;
+  const unitArea = 2 * (a * b + b * c + a * c);
+  const k = Math.sqrt((6 * size * size) / unitArea);
+  const dims = shape.f.map((f) => Math.max(5, Math.floor(f * k)));
+  const area = () => 2 * (dims[0] * dims[1] + dims[1] * dims[2] + dims[0] * dims[2]);
+  // Yuvarlamadan kaybolan noktaları geri ekle: en kısa kenarı büyüt
+  while (area() < 6 * size * size) dims[dims.indexOf(Math.min(...dims))]++;
   return {
     level: n,
-    name: `${isCube ? 'Küp' : 'Prizma'} ${n}`,
+    name: shape.name,
     dims,
     goal: 'rescue',
-    difficulty: 0.95,
-    maxLen: 26 + Math.min(6, Math.floor(k / 5)),
+    difficulty: Math.min(0.97, 0.45 + (n - 1) * 0.025),
+    maxLen: Math.min(34, 10 + Math.floor((n - 1) * 0.8)),
   };
 }
+
+// Eski sürümle uyum (artık bölüm listesi yok)
+export const HAND_LEVEL_COUNT = 20;
 
 export function levelSeed(level) {
   return (level * 2654435761) >>> 0;

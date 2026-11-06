@@ -280,3 +280,16 @@ h1 {
 .next-btn.pulse { animation: glow 1.4s ease-in-out infinite; }
 @keyframes glow { 50% { box-shadow: 0 0 0 8px rgba(255, 122, 89, 0.25), 0 10px 30px rgba(255, 122, 89, 0.3); } }
 @media (prefers-reduced-motion: reduce) { .result-strip.show, .next-btn, .next-btn.pulse { animation: none; } }
+
+/* ---- Ana ekran: arkada dönen 3D küp önizlemesi ---- */
+#home-stage { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+#home-stage canvas { width: 100%; height: 100%; display: block; }
+#screen-home > *:not(#home-stage) { position: relative; z-index: 1; }
+#screen-home .home-top { margin-top: 4vh; }
+#screen-home h1 { text-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); }
+#screen-home .stats-row { margin: 0 auto 4px; background: rgba(15, 27, 36, 0.45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-radius: 14px; border: 1px solid var(--line); }
+#screen-home .menu { margin-top: auto; }
+.preview-label {
+  margin: 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  text-align: center;
+}

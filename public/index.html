@@ -27,27 +27,18 @@
   <div id="app">
     <!-- Ana menü -->
     <section id="screen-home" class="screen active">
+      <div id="home-stage" aria-hidden="true"></div>
       <div class="home-top">
-        <svg class="logo-mark" viewBox="0 0 120 120" aria-hidden="true">
-          <polygon points="60,8 108,34 60,60 12,34" fill="#f6f7f9"/>
-          <polygon points="12,34 60,60 60,114 12,88" fill="#d9dfe6"/>
-          <polygon points="108,34 60,60 60,114 108,88" fill="#bcc6d1"/>
-          <path d="M40 34 L60 24 L80 34" fill="none" stroke="#1f2a37" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M24 52 L24 74 L44 85" fill="none" stroke="#1f2a37" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M96 52 L76 63 L76 92" fill="none" stroke="#ff7a59" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M70 86 L76 96 L82 86" fill="none" stroke="#ff7a59" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
         <h1>Ok Küp</h1>
         <p class="tagline">Okları doğru sırayla çek, sıkışan dostunu kurtar.</p>
-        <dl class="stats-row">
-          <div class="stat"><dt>Bölüm</dt><dd id="home-level">1</dd></div>
-          <div class="stat"><dt>Yıldız</dt><dd id="home-stars">0</dd></div>
-          <div class="stat"><dt>Puan</dt><dd id="home-score">0</dd></div>
-        </dl>
       </div>
       <div class="menu">
+        <dl class="stats-row">
+            <div class="stat"><dt>Bölüm</dt><dd id="home-level">1</dd></div>
+            <div class="stat"><dt>Yıldız</dt><dd id="home-stars">0</dd></div>
+            <div class="stat"><dt>Puan</dt><dd id="home-score">0</dd></div>
+          </dl>
         <button class="btn big primary" id="btn-play">Oyna <span class="btn-sub" id="play-sub">Bölüm 1</span></button>
-        <button class="btn big" id="btn-levels">Bölümler</button>
         <button class="btn big vs" id="btn-friends">Arkadaşlar &amp; VS</button>
         <button class="btn small ghost" id="btn-howto">Nasıl oynanır?</button>
       </div>
@@ -55,14 +46,6 @@
     </section>
 
     <!-- Bölüm seçimi -->
-    <section id="screen-levels" class="screen">
-      <header class="bar">
-        <button class="icon-btn" data-back>‹</button>
-        <h2>Bölümler</h2>
-        <span></span>
-      </header>
-      <div id="level-grid" class="level-grid"></div>
-    </section>
 
     <!-- Arkadaşlar -->
     <section id="screen-friends" class="screen">

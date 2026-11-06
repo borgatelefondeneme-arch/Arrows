@@ -52,8 +52,10 @@ function buildPath(dims, arrow) {
 }
 
 // [s0, s1] aralığındaki yolu şerit + ok ucu üçgenlerine çevirir.
-function ribbon(path, s0, s1) {
+function ribbon(path, s0, s1, w = LINE_W, headScale = 1, liftAmt = LIFT) {
   const out = [];
+  const LINE_W = w; // eslint-disable-line no-shadow
+  const LIFT = liftAmt; // eslint-disable-line no-shadow
   const tri = (p, q, r) => out.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
   let last = null;
   let first = true;
@@ -68,7 +70,20 @@ function ribbon(path, s0, s1) {
     // Dönüşlerde boşluk kalmasın diye uçları yarım genişlik uzat; kutu kenarındaki katlamalarda uzatma.
     const capStart = first || !(from === 0 && g.aEdge);
     const capEnd = !(to === g.len && g.bEdge) && g.s1 < s1;
-    if (capStart) p0 = p0.addScaledVector(d, -LINE_W / 2);
+    if (first && from > -1) {
+      // Yuvarlak kuyruk
+      const c0 = p0.clone().add(lift);
+      const u = new THREE.Vector3().crossVectors(d, g.n).normalize();
+      const r = LINE_W * 0.62;
+      const seg = 10;
+      for (let i = 0; i < seg; i++) {
+        const a0 = (i / seg) * Math.PI * 2;
+        const a1 = ((i + 1) / seg) * Math.PI * 2;
+        tri(c0, c0.clone().addScaledVector(u, Math.cos(a0) * r).addScaledVector(d, Math.sin(a0) * r),
+          c0.clone().addScaledVector(u, Math.cos(a1) * r).addScaledVector(d, Math.sin(a1) * r));
+      }
+    }
+    if (capStart && !first) p0 = p0.addScaledVector(d, -LINE_W / 2);
     if (capEnd) p1 = p1.addScaledVector(d, LINE_W / 2);
     const side = new THREE.Vector3().crossVectors(d, g.n).multiplyScalar(LINE_W / 2);
     const a1 = p0.clone().add(side).add(lift);
@@ -80,31 +95,64 @@ function ribbon(path, s0, s1) {
     first = false;
   }
   if (last) {
-    const side = new THREE.Vector3().crossVectors(last.d, last.n).multiplyScalar(HEAD_W);
-    const base = last.end.clone().addScaledVector(last.d, -0.04);
-    tri(base.clone().add(side), base.clone().sub(side), last.end.clone().addScaledVector(last.d, HEAD_L));
+    const side = new THREE.Vector3().crossVectors(last.d, last.n).multiplyScalar(HEAD_W * headScale);
+    const base = last.end.clone().addScaledVector(last.d, -0.04 * headScale);
+    const tip = last.end.clone().addScaledVector(last.d, HEAD_L * headScale);
+    // Hafif içe kavisli ok ucu (iki üçgen)
+    const notch = last.end.clone().addScaledVector(last.d, 0.03 * headScale);
+    tri(base.clone().add(side), notch, tip);
+    tri(notch, base.clone().sub(side), tip);
   }
   return new Float32Array(out);
 }
 
 // ---- Yüz dokusu: hafif noktalı ızgara -----------------------------------
 function faceTexture(cols, rows) {
-  const px = Math.max(16, Math.min(64, Math.floor(1024 / Math.max(cols, rows))));
+  const px = Math.max(24, Math.min(64, Math.floor(1536 / Math.max(cols, rows))));
   const cv = document.createElement('canvas');
   cv.width = cols * px;
   cv.height = rows * px;
+  const W = cv.width;
+  const H = cv.height;
   const ctx = cv.getContext('2d');
-  const g = ctx.createLinearGradient(0, 0, cv.width, cv.height);
-  g.addColorStop(0, '#f6f7f9');
-  g.addColorStop(1, '#e6eaef');
+  // Porselen zemin: hafif çapraz ışık
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#fbfbfc');
+  g.addColorStop(1, '#e9edf2');
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = 'rgba(31, 42, 55, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+  // İnce benek dokusu
+  const rnd = (() => { let x = (cols * 73856093) ^ (rows * 19349663); return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+  for (let i = 0; i < (W * H) / 90; i++) {
+    ctx.fillStyle = rnd() < 0.5 ? 'rgba(31,42,55,0.025)' : 'rgba(255,255,255,0.5)';
+    ctx.fillRect(rnd() * W, rnd() * H, 1.5, 1.5);
+  }
+  // Çok silik hücre çizgileri
+  ctx.strokeStyle = 'rgba(31, 42, 55, 0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < cols; i++) { ctx.moveTo(i * px + 0.5, 0); ctx.lineTo(i * px + 0.5, H); }
+  for (let j = 1; j < rows; j++) { ctx.moveTo(0, j * px + 0.5); ctx.lineTo(W, j * px + 0.5); }
+  ctx.stroke();
+  // Kenarlara doğru yumuşak gölge (ortam kapanması hissi)
+  const edge = Math.min(W, H) * 0.12;
+  for (const [x0, y0, x1, y1] of [[0, 0, edge, 0], [W, 0, W - edge, 0], [0, 0, 0, edge], [0, H, 0, H - edge]]) {
+    const eg = ctx.createLinearGradient(x0, y0, x1, y1);
+    eg.addColorStop(0, 'rgba(31, 42, 55, 0.09)');
+    eg.addColorStop(1, 'rgba(31, 42, 55, 0)');
+    ctx.fillStyle = eg;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // Noktalar: küçük gömme delik gibi (koyu nokta + açık alt kenar)
+  const r = Math.max(1.6, px * 0.055);
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      ctx.beginPath();
-      ctx.arc((i + 0.5) * px, (j + 0.5) * px, Math.max(1.5, px * 0.05), 0, Math.PI * 2);
-      ctx.fill();
+      const cx = (i + 0.5) * px;
+      const cy = (j + 0.5) * px;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(cx, cy + r * 0.45, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(31, 42, 55, 0.22)';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
     }
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -113,35 +161,141 @@ function faceTexture(cols, rows) {
   return tex;
 }
 
+// Yumuşak radyal leke (arka plan ışığı ve tozlar için)
+function glowTexture(inner, outer = 'rgba(0,0,0,0)') {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, inner);
+  g.addColorStop(1, outer);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Küpün yuvarlatılmış kenarları: 12 ince silindir + 8 köşe küresi
+function makeBevel(W, H, D) {
+  const g = new THREE.Group();
+  const r = 0.07;
+  const mat = new THREE.MeshStandardMaterial({ color: '#dfe5eb', roughness: 0.35, metalness: 0.05 });
+  const corners = [];
+  for (const x of [0, W]) for (const y of [0, H]) for (const z of [0, D]) corners.push(new THREE.Vector3(x, y, z));
+  const sph = new THREE.SphereGeometry(r, 16, 12);
+  for (const c of corners) { const m = new THREE.Mesh(sph, mat); m.position.copy(c); g.add(m); }
+  for (let i = 0; i < corners.length; i++) {
+    for (let j = i + 1; j < corners.length; j++) {
+      const a = corners[i];
+      const b = corners[j];
+      const diff = [a.x !== b.x, a.y !== b.y, a.z !== b.z].filter(Boolean).length;
+      if (diff !== 1) continue;
+      const len = a.distanceTo(b);
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12, 1, true), mat);
+      cyl.position.copy(a).add(b).multiplyScalar(0.5);
+      cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      g.add(cyl);
+    }
+  }
+  return g;
+}
+
 // ---- Karakter, asma kilit, kafes ------------------------------------------
 function makeCharacter() {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffc45c', roughness: 0.45 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 24), bodyMat);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffc45c', roughness: 0.42, emissive: '#ff9a3c', emissiveIntensity: 0.08 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: '#fff1d0', roughness: 0.6 });
+  const ink = new THREE.MeshStandardMaterial({ color: '#1f2a37', roughness: 0.3 });
+  const inkFlat = new THREE.MeshBasicMaterial({ color: '#1f2a37' });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 40, 28), bodyMat);
   body.scale.set(1, 0.92, 1);
   g.add(body);
-  const earGeo = new THREE.ConeGeometry(0.09, 0.2, 16);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), bellyMat);
+  belly.scale.set(1, 0.85, 0.5);
+  belly.position.set(0, -0.11, 0.17);
+  g.add(belly);
+  // Tepedeki kıvrık tüy
+  const tuft = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.016, 8, 20, Math.PI * 1.4), bodyMat);
+  tuft.position.set(0.02, 0.31, 0);
+  tuft.rotation.set(0, Math.PI / 2, 0.4);
+  g.add(tuft);
+  const earGeo = new THREE.ConeGeometry(0.085, 0.19, 18);
+  const earInner = new THREE.MeshStandardMaterial({ color: '#ff9f7a', roughness: 0.7 });
+  const brows = [];
+  const arms = [];
   for (const s of [-1, 1]) {
     const ear = new THREE.Mesh(earGeo, bodyMat);
-    ear.position.set(0.15 * s, 0.27, 0);
+    ear.position.set(0.15 * s, 0.26, 0);
     ear.rotation.z = -0.35 * s;
     g.add(ear);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), new THREE.MeshStandardMaterial({ color: '#1f2a37', roughness: 0.3 }));
-    eye.position.set(0.1 * s, 0.05, 0.26);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.1, 12), earInner);
+    inner.position.set(0.15 * s, 0.25, 0.04);
+    inner.rotation.z = -0.35 * s;
+    g.add(inner);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.058, 20, 14), ink);
+    eye.scale.set(0.9, 1.1, 0.8);
+    eye.position.set(0.1 * s, 0.05, 0.255);
     g.add(eye);
-    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
-    shine.position.set(0.1 * s + 0.018, 0.075, 0.31);
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.019, 8, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    shine.position.set(0.1 * s + 0.018, 0.078, 0.305);
     g.add(shine);
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: '#ff8f70', roughness: 0.8 }));
-    cheek.scale.set(1, 0.6, 0.4);
-    cheek.position.set(0.19 * s, -0.04, 0.23);
+    const shine2 = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    shine2.position.set(0.1 * s - 0.016, 0.03, 0.305);
+    g.add(shine2);
+    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.05, 4, 8), inkFlat);
+    brow.position.set(0.1 * s, 0.135, 0.27);
+    brow.rotation.z = Math.PI / 2;
+    brow.userData.side = s;
+    g.add(brow);
+    brows.push(brow);
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: '#ff8f70', roughness: 0.8, transparent: true, opacity: 0.85 }));
+    cheek.scale.set(1, 0.6, 0.35);
+    cheek.position.set(0.19 * s, -0.035, 0.235);
     g.add(cheek);
+    // Minik kollar ve ayaklar
+    const arm = new THREE.Group();
+    const armMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.08, 4, 10), bodyMat);
+    armMesh.position.y = -0.06;
+    arm.add(armMesh);
+    arm.position.set(0.27 * s, -0.04, 0.05);
+    arm.rotation.z = 0.5 * s;
+    arm.userData.side = s;
+    g.add(arm);
+    arms.push(arm);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), new THREE.MeshStandardMaterial({ color: '#f2a93b', roughness: 0.5 }));
+    foot.scale.set(1, 0.55, 1.3);
+    foot.position.set(0.11 * s, -0.27, 0.06);
+    g.add(foot);
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 8, 16, Math.PI), new THREE.MeshBasicMaterial({ color: '#1f2a37' }));
-  mouth.position.set(0, -0.05, 0.285);
-  mouth.rotation.z = Math.PI;
-  g.add(mouth);
+  // İki ağız: endişeli (küçük o) ve mutlu (gülümseme)
+  const worried = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.009, 8, 16), inkFlat);
+  worried.position.set(0, -0.06, 0.29);
+  const happy = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.012, 8, 16, Math.PI), inkFlat);
+  happy.position.set(0, -0.045, 0.285);
+  happy.rotation.z = Math.PI;
+  happy.visible = false;
+  g.add(worried, happy);
+  g.userData = { brows, arms, worried, happy };
   return g;
+}
+
+// Yüz ifadesi: 'worried' (sıkışık) | 'happy' (kurtuldu)
+function setMood(ch, mood, t) {
+  const u = ch.userData;
+  if (!u.brows) return;
+  const happy = mood === 'happy';
+  u.worried.visible = !happy;
+  u.happy.visible = happy;
+  for (const b of u.brows) {
+    // endişeli: iç uçlar yukarı; mutlu: hafif kavis yukarı
+    b.rotation.z = Math.PI / 2 + (happy ? -0.15 : 0.45) * b.userData.side;
+    b.position.y = happy ? 0.15 : 0.14;
+  }
+  for (const a of u.arms) {
+    const s = a.userData.side;
+    a.rotation.z = happy ? (2.4 + Math.sin(t * 12 + s) * 0.35) * s : (0.55 + Math.sin(t * 7 + s * 1.3) * 0.25) * s;
+  }
 }
 
 // Sıkıştığı için terleyen damla
@@ -186,27 +340,6 @@ function makeCage() {
   return g;
 }
 
-// Karakterin hapsolduğu 3x3 alanı yüzeyde pembe kareyle işaretler.
-function trapPatch(cells, centerKey, keyOf) {
-  const pos = [];
-  for (const cell of cells) {
-    const n = N[cell.f];
-    const a = axisOf(cell.f);
-    const [b, c] = [0, 1, 2].filter((k) => k !== a);
-    const ub = new THREE.Vector3(); ub.setComponent(b, 0.47);
-    const uc = new THREE.Vector3(); uc.setComponent(c, 0.47);
-    const o = v3(cell.c).addScaledVector(n, 0.004);
-    const p1 = o.clone().sub(ub).sub(uc);
-    const p2 = o.clone().add(ub).sub(uc);
-    const p3 = o.clone().add(ub).add(uc);
-    const p4 = o.clone().sub(ub).add(uc);
-    pos.push(...p1.toArray(), ...p2.toArray(), ...p3.toArray(), ...p1.toArray(), ...p3.toArray(), ...p4.toArray());
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: TRAP_COLOR, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
-}
-
 // ---- Sahne ----------------------------------------------------------------
 // Kamera hep -z yönüne bakar; küp "pivot" grubuyla elle döndürülür (her yöne serbest),
 // iki parmakla fotoğraf gibi büyütülür ve kaydırılır.
@@ -217,7 +350,7 @@ export class GameScene {
     this.arrowAt = arrowAt;
     this.onDoubleTapEmpty = onDoubleTapEmpty;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
@@ -234,6 +367,24 @@ export class GameScene {
     sun.position.set(4, 10, 7);
     this.scene.add(sun);
 
+    // Ortam: küpün arkasında sıcak ve soğuk ışık haleleri + süzülen ışık tozları
+    this.env = new THREE.Group();
+    this.scene.add(this.env);
+    const warm = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,122,89,0.30)'), depthWrite: false, transparent: true }));
+    const cool = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(108,180,238,0.22)'), depthWrite: false, transparent: true }));
+    this.glows = [warm, cool];
+    this.env.add(warm, cool);
+    const dustN = 160;
+    const dpos = new Float32Array(dustN * 3);
+    this.dustSeed = [];
+    for (let i = 0; i < dustN; i++) this.dustSeed.push([Math.random(), Math.random(), Math.random(), Math.random()]);
+    const dgeo = new THREE.BufferGeometry();
+    dgeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
+    this.dust = new THREE.Points(dgeo, new THREE.PointsMaterial({
+      map: glowTexture('rgba(255,255,255,1)'), size: 0.25, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, color: '#ffe9d6',
+    }));
+    this.env.add(this.dust);
+
     this.pivot = new THREE.Group();
     this.world = new THREE.Group();
     this.pivot.add(this.world);
@@ -248,6 +399,13 @@ export class GameScene {
     this.ro.observe(container);
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
+    this.autoSpin = false;
+  }
+
+  // Ekran görünmüyorken çizimi durdur (pil için)
+  setActive(on) {
+    this.renderer.setAnimationLoop(on ? () => this.frame() : null);
+    if (on) this.clock.getDelta();
   }
 
   load(puzzle) {
@@ -265,18 +423,20 @@ export class GameScene {
     this.box = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), mats);
     this.box.position.set(W / 2, H / 2, D / 2);
     this.world.add(this.box);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.box.geometry), new THREE.LineBasicMaterial({ color: '#c3ccd6' }));
-    edges.position.copy(this.box.position);
-    this.world.add(edges);
+    this.world.add(makeBevel(W, H, D));
 
     for (const a of puzzle.arrows) {
       const path = buildPath(puzzle.dims, a);
       const mat = new THREE.MeshBasicMaterial({ color: ARROW_COLOR, side: THREE.DoubleSide, transparent: true });
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
-      mesh.renderOrder = 1;
-      const entry = { id: a.id, arrow: a, path, mesh, mat, color: ARROW_COLOR, shift: 0 };
+      mesh.renderOrder = 2;
+      // Altında yumuşak gölge: okun yüzeyden hafif kalkık durduğu hissi
+      const shadowMat = new THREE.MeshBasicMaterial({ color: '#1f2a37', side: THREE.DoubleSide, transparent: true, opacity: 0.1, depthWrite: false });
+      const shadow = new THREE.Mesh(new THREE.BufferGeometry(), shadowMat);
+      shadow.renderOrder = 1;
+      const entry = { id: a.id, arrow: a, path, mesh, mat, shadow, shadowMat, color: ARROW_COLOR, shift: 0 };
       this.setShift(entry, 0);
-      this.world.add(mesh);
+      this.world.add(shadow, mesh);
       this.arrows.set(a.id, entry);
     }
 
@@ -321,6 +481,12 @@ export class GameScene {
 
     const radius = Math.sqrt(W * W + H * H + D * D) / 2;
     this.radius = radius;
+    const [warm, cool] = this.glows;
+    warm.scale.setScalar(radius * 4.2);
+    warm.position.set(radius * 0.5, -radius * 0.4, -radius * 1.6);
+    cool.scale.setScalar(radius * 3.6);
+    cool.position.set(-radius * 0.9, radius * 0.7, -radius * 2.0);
+    this.dust.material.size = 0.12 + radius * 0.025;
     const fit = radius + (this.charMode === 'cage' ? 0.9 : 0);
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
@@ -361,6 +527,11 @@ export class GameScene {
     const pos = ribbon(entry.path, s, s + entry.path.bodyLen);
     entry.mesh.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     entry.mesh.geometry.computeBoundingSphere();
+    if (entry.shadow) {
+      const sp = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W * 2.4, 1.35, LIFT * 0.4);
+      entry.shadow.geometry.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+      entry.shadow.geometry.computeBoundingSphere();
+    }
   }
 
   // ---- Kamera ve dokunma kontrolleri ---------------------------------------
@@ -551,9 +722,11 @@ export class GameScene {
     this.tween(dur, (t) => {
       this.setShift(e, easeInQuad(t) * travel);
       e.mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      e.shadowMat.opacity = 0.1 * (1 - t);
     }, () => {
-      this.world.remove(e.mesh);
+      this.world.remove(e.mesh, e.shadow);
       e.mesh.geometry.dispose();
+      e.shadow.geometry.dispose();
       this.arrows.delete(id);
     });
   }
@@ -708,6 +881,11 @@ export class GameScene {
         tw.done?.();
       }
     }
+    // Ana ekrandaki önizleme kendi kendine yavaşça döner
+    if (this.autoSpin) {
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dt * 0.25);
+      this.pivot.quaternion.premultiply(q);
+    }
     // Parmağı bırakınca süzülerek dönme
     if (Math.abs(this.spin.vx) + Math.abs(this.spin.vy) > 0.002) {
       const ms = dt * 1000;
@@ -716,7 +894,19 @@ export class GameScene {
       this.spin.vx *= decay;
       this.spin.vy *= decay;
     }
+    // Süzülen tozlar
+    if (this.dust && this.radius) {
+      const a = this.dust.geometry.attributes.position;
+      const R = this.radius * 2.2;
+      for (let i = 0; i < this.dustSeed.length; i++) {
+        const [u, v, w, sp] = this.dustSeed[i];
+        const ang = u * Math.PI * 2 + t * 0.03 * (0.5 + sp);
+        a.setXYZ(i, Math.cos(ang) * R * (0.4 + v * 0.8), ((w + t * 0.01 * (0.3 + sp)) % 1 - 0.5) * R * 1.6, Math.sin(ang) * R * (0.4 + v * 0.8) - this.radius * 0.6);
+      }
+      a.needsUpdate = true;
+    }
     const ch = this.character;
+    if (ch) setMood(ch, this.charMode === 'surface' || this.charMode === 'running' ? (this.charMode === 'running' ? 'happy' : 'worried') : 'happy', t);
     if (ch) {
       if (this.charMode === 'surface') {
         // Okların arasında sıkışmış: biraz basık, titriyor, terliyor; yüzü hep oyuncuya dönük.

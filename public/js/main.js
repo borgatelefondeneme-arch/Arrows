@@ -1,5 +1,5 @@
 // Ok Küp – arayüz ve oyun akışı.
-import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, cleanBonus, BUMP_STUN_MS, HAND_LEVEL_COUNT } from './puzzle.js';
+import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, cleanBonus, BUMP_STUN_MS } from './puzzle.js';
 import { GameScene } from './scene.js';
 import { Net } from './net.js';
 import * as storage from './storage.js';
@@ -67,8 +67,8 @@ function show(name, { push = true } = {}) {
   const current = document.querySelector('.screen.active');
   if (current && push && current.id !== `screen-${name}`) history.push(current.id.replace('screen-', ''));
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === `screen-${name}`));
-  if (name === 'home') { history.length = 0; renderHome(); }
-  if (name === 'levels') renderLevels();
+  if (name === 'home') { history.length = 0; renderHome(); setTimeout(renderHomePreview, 30); }
+  else homeScene?.setActive(false);
   if (name === 'friends') renderFriends();
 }
 function back() { show(history.pop() || 'home', { push: false }); }
@@ -81,24 +81,6 @@ function renderHome() {
   $('#play-sub').textContent = `Bölüm ${store.maxLevel}`;
 }
 
-function renderLevels() {
-  const grid = $('#level-grid');
-  const count = Math.max(HAND_LEVEL_COUNT, store.maxLevel + 4);
-  let html = '';
-  for (let lv = 1; lv <= count; lv++) {
-    const cfg = levelConfig(lv);
-    const locked = lv > store.maxLevel;
-    const best = store.best[lv];
-    html += `<button class="level ${locked ? 'locked' : ''} ${lv === store.maxLevel ? 'current' : ''}" data-level="${lv}" ${locked ? 'disabled' : ''}>
-      <span class="num">${lv}</span>
-      <span class="name">${esc(cfg.name)}</span><span class="dims">${cfg.dims.join(' × ')}</span>
-      <span class="stars">${starsHtml(best?.stars || 0)}${best?.clean ? '<span class="gem" title="Tam temizlik">◆</span>' : ''}</span>
-    </button>`;
-  }
-  grid.innerHTML = html;
-  grid.querySelectorAll('.level:not(.locked)').forEach((b) => b.addEventListener('click', () => startSolo(Number(b.dataset.level))));
-  grid.querySelector('.current')?.scrollIntoView({ block: 'center' });
-}
 
 function renderFriends() {
   $('#my-name').value = store.name || '';
@@ -135,7 +117,6 @@ function renderFriends() {
 
 // ---- Ana menü düğmeleri ----------------------------------------------------
 $('#btn-play').addEventListener('click', () => startSolo(store.maxLevel));
-$('#btn-levels').addEventListener('click', () => show('levels'));
 $('#btn-friends').addEventListener('click', () => {
   show('friends');
   if (!store.name) askName();
@@ -244,8 +225,36 @@ function ensureScene() {
   return scene;
 }
 
+// Aynı bölümü iki kez üretmemek için küçük önbellek (ana ekran önizlemesi + oyun)
+const puzzleCache = new Map();
+function getPuzzle(level) {
+  if (!puzzleCache.has(level)) {
+    if (puzzleCache.size > 4) puzzleCache.delete(puzzleCache.keys().next().value);
+    puzzleCache.set(level, generatePuzzle(level, levelSeed(level)));
+  }
+  return puzzleCache.get(level);
+}
+
+// Ana ekranın arkasında sıradaki bölümün küpü yavaşça döner
+let homeScene = null;
+let homeLevel = 0;
+function renderHomePreview() {
+  if (!$('#screen-home').classList.contains('active')) return;
+  if (!homeScene) {
+    homeScene = new GameScene($('#home-stage'), {});
+    homeScene.autoSpin = true;
+  }
+  homeScene.setActive(true);
+  if (homeLevel !== store.maxLevel) {
+    homeLevel = store.maxLevel;
+    homeScene.load(getPuzzle(store.maxLevel));
+    homeScene.dist = homeScene.baseDistance * 1.7;
+    homeScene.pan.set(0, -homeScene.baseDistance * 0.06);
+  }
+}
+
 function startSolo(level) {
-  const puzzle = generatePuzzle(level, levelSeed(level));
+  const puzzle = getPuzzle(level);
   beginGame({ puzzle, mode: 'solo', level, startIn: 2400 });
 }
 
@@ -604,6 +613,7 @@ net.on('matchEnd', (m) => {
 
 // ---- Başlangıç -----------------------------------------------------------
 renderHome();
+setTimeout(renderHomePreview, 60);
 if (!store.name && !localStorage.getItem('okkup:howto')) {
   try { localStorage.setItem('okkup:howto', '1'); } catch { /* yok say */ }
   showHowTo();

@@ -31,12 +31,13 @@ Aynı dosya `docs/index.html` olarak da yazılır; GitHub Pages bu klasörü yay
 - Tek parmakla kaydırarak küpü **her yöne serbestçe çevir** (bırakınca süzülür), iki parmakla
   fotoğraf gibi **büyüt/küçült ve kaydır**. Boş yere çift dokunmak ya da ⟲ görünümü sıfırlar.
 
-## Bölümler
-20 el yapımı bölüm kolaydan zora gider: 8×8×8 başlangıç küpünden 18×18×18 efsane küpe, arada
-8×11×8, 12×8×10, 10×15×10, 15×8×14, 10×18×10, 20×14×16 gibi dikdörtgen prizmalar. Oklar ince ve
-uzun, kıvrılarak köşelerden komşu yüzlere geçer. Karakteri kurtarmak için gereken ok sayısı
-başlangıçta ~7, son bölümlerde 25+; sonra sonsuz bölümler gelir. Oklar tersten üretildiği için
-**her bölümün çözümü vardır ve asla kilitlenmez** (bkz. `public/js/puzzle.js`).
+## Bölümler (sonsuz)
+Bölüm listesi yok: oyun kaldığın bölümden devam eder, biten bölüm geride kalır. Her bölümde
+kutu biraz daha büyür, yani yüzeydeki nokta (ve ok) sayısı artar: 8×8×8 küpten (384 nokta)
+başlar, ~31. bölümde 24 birimlik kutulara (~3500 nokta) ulaşır; küp, kule, yassı prizma, tuğla
+şekilleri sırayla gelir. Zorluk ve ok uzunluğu da artar; boyut sınırından sonra yeni bulmacalar
+sonsuza kadar gelir. Oklar tersten üretildiği için **her bölümün çözümü vardır ve asla
+kilitlenmez** (bkz. `public/js/puzzle.js`).
 
 ## VS (arkadaşınla düello)
 1. **Arkadaşlar & VS** ekranında adını yaz; 6 karakterlik **arkadaş kodunu** paylaş.
