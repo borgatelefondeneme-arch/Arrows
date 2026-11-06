@@ -60,6 +60,7 @@ ${scripts}
 const artifact = `${headCommon}
 <style>${css}
 :root { color-scheme: light; }
+body { background-color: #e3ecf1; }
 </style>
 ${body}
 ${scripts}
