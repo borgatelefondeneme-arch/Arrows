@@ -30,10 +30,10 @@ const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'))
 
 const headCommon = `<title>Ok Küp</title>
 <meta name="description" content="Küpün üzerindeki okları temizle, en zor noktadaki tatlı dostunu kurtar!">
-<meta name="theme-color" content="#6c5ce7">
+<meta name="theme-color" content="#e6eef3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Ok Küp">
 <link rel="apple-touch-icon" href="${icon}">
 <link rel="icon" href="${icon}">`;

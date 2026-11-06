@@ -1,5 +1,5 @@
 // Ok Küp – arayüz ve oyun akışı.
-import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, cleanBonus, BUMP_STUN_MS } from './puzzle.js';
+import { generatePuzzle, levelConfig, levelSeed, MODES, PuzzleState, scoreFor, cleanBonus, BUMP_STUN_MS } from './puzzle.js';
 import { GameScene } from './scene.js';
 import { Net } from './net.js';
 import * as storage from './storage.js';
@@ -80,11 +80,12 @@ function renderHome() {
   $('#home-score').textContent = storage.totalScore(store).toLocaleString('tr-TR');
   $('#play-sub').textContent = `Bölüm ${store.maxLevel}`;
   // Sıradaki bölüm kartı: şekil, boyut, nokta sayısı, zorluk
-  const cfg = levelConfig(store.maxLevel);
+  const cfg = levelConfig(store.maxLevel, currentMode());
   const [w, h, d] = cfg.dims;
+  document.querySelectorAll('#mode-select button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === currentMode())));
   $('#next-name').textContent = cfg.name;
   $('#next-meta').textContent = `${w} × ${h} × ${d} · ${(2 * (w * h + h * d + w * d)).toLocaleString('tr-TR')} nokta`;
-  const pips = Math.max(1, Math.min(5, Math.ceil(((cfg.difficulty - 0.45) / 0.52) * 5)));
+  const pips = Math.max(1, Math.min(5, Math.ceil(((cfg.difficulty - 0.1) / 0.87) * 5)));
   $('#next-diff').querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < pips));
 }
 
@@ -245,14 +246,25 @@ function ensureScene() {
   return scene;
 }
 
+// Seçili zorluk (Kolay / Normal / Zor / Uzman) cihazda hatırlanır
+function currentMode() { return MODES[store.mode] ? store.mode : 'normal'; }
+document.querySelectorAll('#mode-select button').forEach((b) => b.addEventListener('click', () => {
+  store.mode = b.dataset.mode;
+  persist();
+  sfx.pop();
+  renderHome();
+  renderHomePreview();
+}));
+
 // Aynı bölümü iki kez üretmemek için küçük önbellek (ana ekran önizlemesi + oyun)
 const puzzleCache = new Map();
-function getPuzzle(level) {
-  if (!puzzleCache.has(level)) {
+function getPuzzle(level, mode = currentMode()) {
+  const key = `${mode}:${level}`;
+  if (!puzzleCache.has(key)) {
     if (puzzleCache.size > 4) puzzleCache.delete(puzzleCache.keys().next().value);
-    puzzleCache.set(level, generatePuzzle(level, levelSeed(level)));
+    puzzleCache.set(key, generatePuzzle(levelConfig(level, mode), levelSeed(level, mode)));
   }
-  return puzzleCache.get(level);
+  return puzzleCache.get(key);
 }
 
 // Ana ekranın arkasında sıradaki bölümün küpü yavaşça döner
@@ -265,8 +277,8 @@ function renderHomePreview() {
     homeScene.autoSpin = true;
   }
   homeScene.setActive(true);
-  if (homeLevel !== store.maxLevel) {
-    homeLevel = store.maxLevel;
+  if (homeLevel !== `${currentMode()}:${store.maxLevel}`) {
+    homeLevel = `${currentMode()}:${store.maxLevel}`;
     homeScene.load(getPuzzle(store.maxLevel));
     homeScene.dist = homeScene.baseDistance * 1.7;
     homeScene.pan.set(0, -homeScene.baseDistance * 0.06);

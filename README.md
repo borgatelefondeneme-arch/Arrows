@@ -31,6 +31,12 @@ Aynı dosya `docs/index.html` olarak da yazılır; GitHub Pages bu klasörü yay
 - Tek parmakla kaydırarak küpü **her yöne serbestçe çevir** (bırakınca süzülür), iki parmakla
   fotoğraf gibi **büyüt/küçült ve kaydır**. Boş yere çift dokunmak ya da ⟲ görünümü sıfırlar.
 
+## Zorluk seçimi
+Ana ekrandaki **Kolay / Normal / Zor / Uzman** seçimi her bölümün kutu boyutunu (nokta sayısını),
+okların uzunluğunu ve karakterin ne kadar derine sıkıştığını değiştirir. Örneğin Bölüm 1:
+Kolay 6×6×6 (216 nokta), Normal 8×8×8 (384), Zor 11×11×11 (726), Uzman 14×14×14 (1.176).
+Seçim cihazda hatırlanır; bölüm ilerlemesi ortaktır.
+
 ## Bölümler (sonsuz)
 Bölüm listesi yok: oyun kaldığın bölümden devam eder, biten bölüm geride kalır. Her bölümde
 kutu biraz daha büyür, yani yüzeydeki nokta (ve ok) sayısı artar: 8×8×8 küpten (384 nokta)

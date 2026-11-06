@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Ok Küp</title>
   <meta name="description" content="Küpün üzerindeki okları temizle, kafesteki tatlı karakteri kurtar!">
-  <meta name="theme-color" content="#0f1b24">
+  <meta name="theme-color" content="#e6eef3">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -56,6 +56,12 @@
             <span class="eyebrow">Zorluk</span>
             <div class="pips" id="next-diff"><i></i><i></i><i></i><i></i><i></i></div>
           </div>
+        </div>
+        <div class="segmented" id="mode-select" role="group" aria-label="Zorluk seç">
+          <button data-mode="kolay" aria-pressed="false">Kolay</button>
+          <button data-mode="normal" aria-pressed="true">Normal</button>
+          <button data-mode="zor" aria-pressed="false">Zor</button>
+          <button data-mode="uzman" aria-pressed="false">Uzman</button>
         </div>
         <button class="play-btn" id="btn-play"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></svg>Oyna</button>
         <button class="btn ghost-light" id="btn-friends">Arkadaşlar &amp; VS</button>

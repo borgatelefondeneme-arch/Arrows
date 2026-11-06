@@ -109,10 +109,19 @@ const SHAPES = [
   { name: 'Uzun Prizma', f: [0.85, 1.05, 1.25] },
 ];
 
-export function levelConfig(level) {
+// Oyuncunun seçtiği zorluk: boyut (nokta sayısı), zorluk katsayısı ve ok uzunluğunu değiştirir.
+export const MODES = {
+  kolay: { label: 'Kolay', size: -2.5, diff: -0.3, len: 0.7, seed: 11 },
+  normal: { label: 'Normal', size: 0, diff: 0, len: 1, seed: 0 },
+  zor: { label: 'Zor', size: 3, diff: 0.15, len: 1.2, seed: 23 },
+  uzman: { label: 'Uzman', size: 6, diff: 0.3, len: 1.4, seed: 37 },
+};
+
+export function levelConfig(level, mode = 'normal') {
   const n = Math.max(1, Math.floor(level));
-  // Hedef yüzey nokta sayısı her bölümde artar: 6·s² (s: 8'den MAX_SIZE'a)
-  const size = Math.min(MAX_SIZE, 8 + (n - 1) * 0.55);
+  const m = MODES[mode] || MODES.normal;
+  // Hedef yüzey nokta sayısı her bölümde artar: 6·s² (s: 8'den MAX_SIZE'a), zorluğa göre kaydırılır
+  const size = Math.max(6, Math.min(MAX_SIZE + 2, Math.min(MAX_SIZE, 8 + (n - 1) * 0.55) + m.size));
   const shape = SHAPES[(n - 1) % SHAPES.length];
   const [a, b, c] = shape.f;
   const unitArea = 2 * (a * b + b * c + a * c);
@@ -126,16 +135,17 @@ export function levelConfig(level) {
     name: shape.name,
     dims,
     goal: 'rescue',
-    difficulty: Math.min(0.97, 0.45 + (n - 1) * 0.025),
-    maxLen: Math.min(34, 10 + Math.floor((n - 1) * 0.8)),
+    mode: MODES[mode] ? mode : 'normal',
+    difficulty: Math.max(0.05, Math.min(0.97, 0.45 + (n - 1) * 0.025 + m.diff)),
+    maxLen: Math.max(4, Math.min(40, Math.round((10 + Math.floor((n - 1) * 0.8)) * m.len))),
   };
 }
 
 // Eski sürümle uyum (artık bölüm listesi yok)
 export const HAND_LEVEL_COUNT = 20;
 
-export function levelSeed(level) {
-  return (level * 2654435761) >>> 0;
+export function levelSeed(level, mode = 'normal') {
+  return ((level + ((MODES[mode] || MODES.normal).seed * 100003)) * 2654435761) >>> 0;
 }
 
 // ---- Üretici ----------------------------------------------------------------
@@ -152,7 +162,7 @@ export function generatePuzzle(levelOrConfig, seed) {
     if (!best || p.quality > best.quality) best = p;
     // Zorluğa göre kaçış yolunun en az kaç ok gerektirmesi gerektiği
     const target = Math.min(30, 1 + p.arrows.length * (0.05 + (cfg.difficulty ?? 0.4) * 0.12));
-    const enoughDepth = cfg.goal === 'clear' || p.required.length >= target;
+    const enoughDepth = cfg.mode === 'kolay' || cfg.goal === 'clear' || p.required.length >= target;
     if (p.fill > 0.85 && enoughDepth) break;
   }
   if (!best) throw new Error('Bulmaca üretilemedi');
@@ -276,7 +286,11 @@ function tryGenerate(cfg, seed) {
         candidates.push({ X, c, score: cost - X.cells.length * 0.1 + rnd() * 0.2 });
       }
     }
-    candidates.sort((a, b) => b.score - a.score);
+    if (cfg.mode === 'kolay') {
+      // Kolay modda en zor nokta yerine bölümle yavaşça artan bir zorlukta nokta seçilir
+      const want = 2 + (cfg.level ?? 1) * 0.35;
+      candidates.sort((a, b) => Math.abs(a.score - want) - Math.abs(b.score - want));
+    } else candidates.sort((a, b) => b.score - a.score);
     for (const cand of candidates.slice(0, 25)) {
       const r = finalizeRescue(dims, arrows, cand.X, cand.c);
       if (r) { ({ list, character, required } = r); break; }

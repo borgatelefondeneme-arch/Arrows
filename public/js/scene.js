@@ -5,16 +5,15 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { DIRS, axisOf, rayCells, headOf } from './puzzle.js';
 
 // Palet: porselen küp, mürekkep oklar, mercan/kehribar vurgular
-const ARROW_COLOR = '#1f2a37';
-const TRAP_COLOR = '#ff7a59';
-const BUMP_COLOR = '#ff7a59';
-const BLOCKER_COLOR = '#f4b860';
-const HINT_COLOR = '#2fbf9b';
+const ARROW_COLOR = '#14283c';
+const TRAP_COLOR = '#ff6b57';
+const BUMP_COLOR = '#ff6b57';
+const BLOCKER_COLOR = '#f5a524';
+const HINT_COLOR = '#0eb39b';
 const LINE_W = 0.13;
 const HEAD_W = 0.21;
 const HEAD_L = 0.3;
 const LIFT = 0.012;
-const ARROW_H = 0.055; // okların yüzeyden kabartma yüksekliği
 
 const N = DIRS.map((d) => new THREE.Vector3(...d));
 const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
@@ -391,8 +390,9 @@ export class GameScene {
     // Ortam: küpün arkasında sıcak ve soğuk ışık haleleri + süzülen ışık tozları
     this.env = new THREE.Group();
     this.scene.add(this.env);
-    const warm = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,122,89,0.30)'), depthWrite: false, transparent: true }));
-    const cool = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(108,180,238,0.22)'), depthWrite: false, transparent: true }));
+    // Açık zeminde: küpün arkasında yumuşak gölge ve ferah bir ışık lekesi
+    const warm = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(20,40,60,0.20)'), depthWrite: false, transparent: true }));
+    const cool = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(255,255,255,0.75)'), depthWrite: false, transparent: true }));
     this.glows = [warm, cool];
     this.env.add(warm, cool);
     const dustN = 160;
@@ -402,7 +402,7 @@ export class GameScene {
     const dgeo = new THREE.BufferGeometry();
     dgeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
     this.dust = new THREE.Points(dgeo, new THREE.PointsMaterial({
-      map: glowTexture('rgba(255,255,255,1)'), size: 0.25, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, color: '#ffe9d6',
+      map: glowTexture('rgba(255,255,255,1)'), size: 0.25, transparent: true, opacity: 0.35, depthWrite: false, color: '#5fb8ab',
     }));
     this.env.add(this.dust);
 
@@ -449,16 +449,14 @@ export class GameScene {
 
     for (const a of puzzle.arrows) {
       const path = buildPath(puzzle.dims, a);
-      const mat = new THREE.MeshStandardMaterial({ color: ARROW_COLOR, roughness: 0.32, metalness: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide, transparent: true });
+      // Düz, net çizgi (ışıktan etkilenmez)
+      const mat = new THREE.MeshBasicMaterial({ color: ARROW_COLOR, side: THREE.DoubleSide, transparent: true });
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
       mesh.renderOrder = 2;
       // Altında yumuşak gölge: okun yüzeyden hafif kalkık durduğu hissi
-      const shadowMat = new THREE.MeshBasicMaterial({ color: '#0f1720', side: THREE.DoubleSide, transparent: true, opacity: 0.13, depthWrite: false });
-      const shadow = new THREE.Mesh(new THREE.BufferGeometry(), shadowMat);
-      shadow.renderOrder = 1;
-      const entry = { id: a.id, arrow: a, path, mesh, mat, shadow, shadowMat, color: ARROW_COLOR, shift: 0 };
+      const entry = { id: a.id, arrow: a, path, mesh, mat, color: ARROW_COLOR, shift: 0 };
       this.setShift(entry, 0);
-      this.world.add(shadow, mesh);
+      this.world.add(mesh);
       this.arrows.set(a.id, entry);
     }
 
@@ -504,10 +502,10 @@ export class GameScene {
     const radius = Math.sqrt(W * W + H * H + D * D) / 2;
     this.radius = radius;
     const [warm, cool] = this.glows;
-    warm.scale.setScalar(radius * 4.2);
-    warm.position.set(radius * 0.5, -radius * 0.4, -radius * 1.6);
-    cool.scale.setScalar(radius * 3.6);
-    cool.position.set(-radius * 0.9, radius * 0.7, -radius * 2.0);
+    warm.scale.setScalar(radius * 3.4);
+    warm.position.set(radius * 0.25, -radius * 0.35, -radius * 1.4);
+    cool.scale.setScalar(radius * 4.2);
+    cool.position.set(-radius * 0.5, radius * 0.6, -radius * 2.2);
     this.dust.material.size = 0.12 + radius * 0.025;
     const fit = radius + (this.charMode === 'cage' ? 0.9 : 0);
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
@@ -546,15 +544,9 @@ export class GameScene {
 
   setShift(entry, s) {
     entry.shift = s;
-    const pos = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W, 1, 0.004, ARROW_H);
+    const pos = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W, 1, LIFT, 0);
     entry.mesh.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    entry.mesh.geometry.computeVertexNormals();
     entry.mesh.geometry.computeBoundingSphere();
-    if (entry.shadow) {
-      const sp = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W * 2.6, 1.4, 0.003, 0);
-      entry.shadow.geometry.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-      entry.shadow.geometry.computeBoundingSphere();
-    }
   }
 
   // ---- Kamera ve dokunma kontrolleri ---------------------------------------
@@ -745,11 +737,9 @@ export class GameScene {
     this.tween(dur, (t) => {
       this.setShift(e, easeInQuad(t) * travel);
       e.mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-      e.shadowMat.opacity = 0.13 * (1 - t);
     }, () => {
-      this.world.remove(e.mesh, e.shadow);
+      this.world.remove(e.mesh);
       e.mesh.geometry.dispose();
-      e.shadow.geometry.dispose();
       this.arrows.delete(id);
     });
   }
