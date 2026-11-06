@@ -3,7 +3,7 @@ import { generatePuzzle, levelConfig, levelSeed, PuzzleState, scoreFor, cleanBon
 import { GameScene } from './scene.js';
 import { Net } from './net.js';
 import * as storage from './storage.js';
-import { sfx, unlock as unlockAudio } from './sound.js';
+import { sfx, unlock as unlockAudio, setEnabled as setSound } from './sound.js';
 
 const $ = (s) => document.querySelector(s);
 // Tek dosyalık internetsiz sürümde sunucu ve VS kapalı.
@@ -79,7 +79,27 @@ function renderHome() {
   $('#home-stars').textContent = storage.totalStars(store);
   $('#home-score').textContent = storage.totalScore(store).toLocaleString('tr-TR');
   $('#play-sub').textContent = `Bölüm ${store.maxLevel}`;
+  // Sıradaki bölüm kartı: şekil, boyut, nokta sayısı, zorluk
+  const cfg = levelConfig(store.maxLevel);
+  const [w, h, d] = cfg.dims;
+  $('#next-name').textContent = cfg.name;
+  $('#next-meta').textContent = `${w} × ${h} × ${d} · ${(2 * (w * h + h * d + w * d)).toLocaleString('tr-TR')} nokta`;
+  const pips = Math.max(1, Math.min(5, Math.ceil(((cfg.difficulty - 0.45) / 0.52) * 5)));
+  $('#next-diff').querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < pips));
 }
+
+// Ses aç/kapat (cihazda hatırlanır)
+function applySound() {
+  setSound(store.sound !== false);
+  $('#btn-sound').classList.toggle('muted', store.sound === false);
+}
+$('#btn-sound').addEventListener('click', () => {
+  store.sound = store.sound === false;
+  persist();
+  applySound();
+  if (store.sound) sfx.pop();
+});
+applySound();
 
 
 function renderFriends() {
@@ -330,6 +350,7 @@ function updateHud() {
   $('#hud-remaining').textContent = before ? state.escapeCost : state.remaining;
   $('#hud-unit').textContent = before ? 'engel' : 'ok kaldı';
   if (game.mode === 'vs') $('#vs-me').style.width = `${100 * state.progress}%`;
+  $('#hud-progress').style.width = `${100 * state.progress}%`;
 }
 
 function onTap(id) {

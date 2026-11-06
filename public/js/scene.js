@@ -1,6 +1,7 @@
 // 3D sahne: kutuyu, yüzeyindeki kıvrımlı okları, kilitli karakteri çizer;
 // döndürme / yakınlaştırma / dokunma ve okların kayma animasyonları.
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { DIRS, axisOf, rayCells, headOf } from './puzzle.js';
 
 // Palet: porselen küp, mürekkep oklar, mercan/kehribar vurgular
@@ -13,6 +14,7 @@ const LINE_W = 0.13;
 const HEAD_W = 0.21;
 const HEAD_L = 0.3;
 const LIFT = 0.012;
+const ARROW_H = 0.055; // okların yüzeyden kabartma yüksekliği
 
 const N = DIRS.map((d) => new THREE.Vector3(...d));
 const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
@@ -51,57 +53,66 @@ function buildPath(dims, arrow) {
   return { segs, bodyLen, exitDist: k + 0.5 };
 }
 
-// [s0, s1] aralığındaki yolu şerit + ok ucu üçgenlerine çevirir.
-function ribbon(path, s0, s1, w = LINE_W, headScale = 1, liftAmt = LIFT) {
+// Yüzeydeki bir çokgeni (fan sırasıyla) h kadar yükseltip yan duvarlarıyla birlikte üçgenlere çevirir.
+function prism(out, pts, n, h, walls) {
+  const top = pts.map((p) => p.clone().addScaledVector(n, h));
+  for (let i = 1; i < top.length - 1; i++) out.push(...top[0].toArray(), ...top[i].toArray(), ...top[i + 1].toArray());
+  if (!walls) return;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const at = top[i];
+    const bt = top[(i + 1) % pts.length];
+    out.push(...a.toArray(), ...b.toArray(), ...bt.toArray(), ...a.toArray(), ...bt.toArray(), ...at.toArray());
+  }
+}
+
+// [s0, s1] aralığındaki yolu kabartma (yüksekliği h) şerit + yuvarlak kuyruk + ok ucu olarak üretir.
+// h = 0 ise düz (gölge için).
+function ribbon(path, s0, s1, w = LINE_W, headScale = 1, lift = LIFT, h = 0) {
   const out = [];
-  const LINE_W = w; // eslint-disable-line no-shadow
-  const LIFT = liftAmt; // eslint-disable-line no-shadow
-  const tri = (p, q, r) => out.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+  const walls = h > 0;
   let last = null;
   let first = true;
   for (const g of path.segs) {
     if (g.s1 <= s0 || g.s0 >= s1 || g.len < 1e-6) continue;
     const d = g.b.clone().sub(g.a).divideScalar(g.len);
-    const lift = g.n.clone().multiplyScalar(LIFT);
+    const lv = g.n.clone().multiplyScalar(lift);
     const from = Math.max(s0, g.s0) - g.s0;
     const to = Math.min(s1, g.s1) - g.s0;
     let p0 = g.a.clone().addScaledVector(d, from);
     let p1 = g.a.clone().addScaledVector(d, to);
-    // Dönüşlerde boşluk kalmasın diye uçları yarım genişlik uzat; kutu kenarındaki katlamalarda uzatma.
-    const capStart = first || !(from === 0 && g.aEdge);
-    const capEnd = !(to === g.len && g.bEdge) && g.s1 < s1;
-    if (first && from > -1) {
+    const u = new THREE.Vector3().crossVectors(d, g.n).normalize();
+    if (first) {
       // Yuvarlak kuyruk
-      const c0 = p0.clone().add(lift);
-      const u = new THREE.Vector3().crossVectors(d, g.n).normalize();
-      const r = LINE_W * 0.62;
-      const seg = 10;
-      for (let i = 0; i < seg; i++) {
-        const a0 = (i / seg) * Math.PI * 2;
-        const a1 = ((i + 1) / seg) * Math.PI * 2;
-        tri(c0, c0.clone().addScaledVector(u, Math.cos(a0) * r).addScaledVector(d, Math.sin(a0) * r),
-          c0.clone().addScaledVector(u, Math.cos(a1) * r).addScaledVector(d, Math.sin(a1) * r));
+      const c0 = p0.clone().add(lv);
+      const r = w * 0.62;
+      const ring = [];
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        ring.push(c0.clone().addScaledVector(u, Math.cos(a) * r).addScaledVector(d, Math.sin(a) * r));
       }
+      prism(out, ring, g.n, h, walls);
     }
-    if (capStart && !first) p0 = p0.addScaledVector(d, -LINE_W / 2);
-    if (capEnd) p1 = p1.addScaledVector(d, LINE_W / 2);
-    const side = new THREE.Vector3().crossVectors(d, g.n).multiplyScalar(LINE_W / 2);
-    const a1 = p0.clone().add(side).add(lift);
-    const a2 = p0.clone().sub(side).add(lift);
-    const b1 = p1.clone().add(side).add(lift);
-    const b2 = p1.clone().sub(side).add(lift);
-    tri(a1, a2, b2); tri(a1, b2, b1);
-    last = { end: g.a.clone().addScaledVector(d, to).add(lift), d, n: g.n };
+    // Dönüşlerde boşluk kalmasın diye uçları yarım genişlik uzat; kutu kenarındaki katlamalarda uzatma.
+    const capStart = !first && !(from === 0 && g.aEdge);
+    const capEnd = !(to === g.len && g.bEdge) && g.s1 < s1;
+    if (capStart) p0 = p0.addScaledVector(d, -w / 2);
+    if (capEnd) p1 = p1.addScaledVector(d, w / 2);
+    const side = u.clone().multiplyScalar(w / 2);
+    prism(out, [
+      p0.clone().sub(side).add(lv), p1.clone().sub(side).add(lv),
+      p1.clone().add(side).add(lv), p0.clone().add(side).add(lv),
+    ], g.n, h, walls);
+    last = { end: g.a.clone().addScaledVector(d, to).add(lv), d, n: g.n, u };
     first = false;
   }
   if (last) {
-    const side = new THREE.Vector3().crossVectors(last.d, last.n).multiplyScalar(HEAD_W * headScale);
+    const side = last.u.clone().multiplyScalar(HEAD_W * headScale);
     const base = last.end.clone().addScaledVector(last.d, -0.04 * headScale);
     const tip = last.end.clone().addScaledVector(last.d, HEAD_L * headScale);
-    // Hafif içe kavisli ok ucu (iki üçgen)
     const notch = last.end.clone().addScaledVector(last.d, 0.03 * headScale);
-    tri(base.clone().add(side), notch, tip);
-    tri(notch, base.clone().sub(side), tip);
+    prism(out, [tip, base.clone().add(side), notch, base.clone().sub(side)], last.n, h, walls);
   }
   return new Float32Array(out);
 }
@@ -117,8 +128,8 @@ function faceTexture(cols, rows) {
   const ctx = cv.getContext('2d');
   // Porselen zemin: hafif çapraz ışık
   const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, '#fbfbfc');
-  g.addColorStop(1, '#e9edf2');
+  g.addColorStop(0, '#e9edf1');
+  g.addColorStop(1, '#d2d9e1');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   // İnce benek dokusu
@@ -179,8 +190,8 @@ function glowTexture(inner, outer = 'rgba(0,0,0,0)') {
 // Küpün yuvarlatılmış kenarları: 12 ince silindir + 8 köşe küresi
 function makeBevel(W, H, D) {
   const g = new THREE.Group();
-  const r = 0.07;
-  const mat = new THREE.MeshStandardMaterial({ color: '#dfe5eb', roughness: 0.35, metalness: 0.05 });
+  const r = 0.09;
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#cfd7df', roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.2, envMapIntensity: 0.6 });
   const corners = [];
   for (const x of [0, W]) for (const y of [0, H]) for (const z of [0, D]) corners.push(new THREE.Vector3(x, y, z));
   const sph = new THREE.SphereGeometry(r, 16, 12);
@@ -204,9 +215,9 @@ function makeBevel(W, H, D) {
 // ---- Karakter, asma kilit, kafes ------------------------------------------
 function makeCharacter() {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffc45c', roughness: 0.42, emissive: '#ff9a3c', emissiveIntensity: 0.08 });
-  const bellyMat = new THREE.MeshStandardMaterial({ color: '#fff1d0', roughness: 0.6 });
-  const ink = new THREE.MeshStandardMaterial({ color: '#1f2a37', roughness: 0.3 });
+  const bodyMat = new THREE.MeshPhysicalMaterial({ color: '#ff9a12', roughness: 0.38, clearcoat: 0.6, clearcoatRoughness: 0.3, sheen: 0.6, sheenColor: '#fff0c8', emissive: '#ff9a3c', emissiveIntensity: 0.06 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: '#ffe3a8', roughness: 0.6 });
+  const ink = new THREE.MeshPhysicalMaterial({ color: '#141c26', roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05 });
   const inkFlat = new THREE.MeshBasicMaterial({ color: '#1f2a37' });
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 40, 28), bodyMat);
   body.scale.set(1, 0.92, 1);
@@ -263,7 +274,7 @@ function makeCharacter() {
     arm.userData.side = s;
     g.add(arm);
     arms.push(arm);
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), new THREE.MeshStandardMaterial({ color: '#f2a93b', roughness: 0.5 }));
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), new THREE.MeshStandardMaterial({ color: '#e8891c', roughness: 0.5 }));
     foot.scale.set(1, 0.55, 1.3);
     foot.position.set(0.11 * s, -0.27, 0.06);
     g.add(foot);
@@ -352,6 +363,9 @@ export class GameScene {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Sinematik renk tonu ve stüdyo ortam ışığı (yumuşak yansımalar, gerçekçi gölgelenme)
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.8;
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -362,10 +376,17 @@ export class GameScene {
     this.pan = new THREE.Vector2(0, 0);
     this.spin = { vx: 0, vy: 0 }; // bırakınca süzülerek dönmeye devam etsin
 
-    this.scene.add(new THREE.HemisphereLight('#ffffff', '#9fb4c7', 2.1));
-    const sun = new THREE.DirectionalLight('#ffffff', 1.0);
-    sun.position.set(4, 10, 7);
-    this.scene.add(sun);
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.add(new THREE.HemisphereLight('#ffffff', '#2c3a4a', 0.2));
+    const key = new THREE.DirectionalLight('#fff1e0', 2.8); // sıcak ana ışık (sağ üst ön)
+    key.position.set(9, 7, 3);
+    const rim = new THREE.DirectionalLight('#9ccfff', 0.7); // soğuk kontur ışığı (sol arka)
+    rim.position.set(-8, 3, -6);
+    const fill = new THREE.DirectionalLight('#ffd2c2', 0.25); // alttan yumuşak dolgu
+    fill.position.set(0, -8, 4);
+    this.scene.add(key, rim, fill);
 
     // Ortam: küpün arkasında sıcak ve soğuk ışık haleleri + süzülen ışık tozları
     this.env = new THREE.Group();
@@ -417,8 +438,9 @@ export class GameScene {
 
     // Kutu (BoxGeometry yüz sırası +x,-x,+y,-y,+z,-z = DIRS sırası)
     const faceDims = [[D, H], [D, H], [W, D], [W, D], [W, H], [W, H]];
-    const mats = faceDims.map(([c, r]) => new THREE.MeshStandardMaterial({
-      map: faceTexture(c, r), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+    const mats = faceDims.map(([c, r]) => new THREE.MeshPhysicalMaterial({
+      map: faceTexture(c, r), roughness: 0.62, clearcoat: 0.4, clearcoatRoughness: 0.4, envMapIntensity: 0.14,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     }));
     this.box = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), mats);
     this.box.position.set(W / 2, H / 2, D / 2);
@@ -427,11 +449,11 @@ export class GameScene {
 
     for (const a of puzzle.arrows) {
       const path = buildPath(puzzle.dims, a);
-      const mat = new THREE.MeshBasicMaterial({ color: ARROW_COLOR, side: THREE.DoubleSide, transparent: true });
+      const mat = new THREE.MeshStandardMaterial({ color: ARROW_COLOR, roughness: 0.32, metalness: 0.2, envMapIntensity: 0.9, side: THREE.DoubleSide, transparent: true });
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
       mesh.renderOrder = 2;
       // Altında yumuşak gölge: okun yüzeyden hafif kalkık durduğu hissi
-      const shadowMat = new THREE.MeshBasicMaterial({ color: '#1f2a37', side: THREE.DoubleSide, transparent: true, opacity: 0.1, depthWrite: false });
+      const shadowMat = new THREE.MeshBasicMaterial({ color: '#0f1720', side: THREE.DoubleSide, transparent: true, opacity: 0.13, depthWrite: false });
       const shadow = new THREE.Mesh(new THREE.BufferGeometry(), shadowMat);
       shadow.renderOrder = 1;
       const entry = { id: a.id, arrow: a, path, mesh, mat, shadow, shadowMat, color: ARROW_COLOR, shift: 0 };
@@ -524,11 +546,12 @@ export class GameScene {
 
   setShift(entry, s) {
     entry.shift = s;
-    const pos = ribbon(entry.path, s, s + entry.path.bodyLen);
+    const pos = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W, 1, 0.004, ARROW_H);
     entry.mesh.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    entry.mesh.geometry.computeVertexNormals();
     entry.mesh.geometry.computeBoundingSphere();
     if (entry.shadow) {
-      const sp = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W * 2.4, 1.35, LIFT * 0.4);
+      const sp = ribbon(entry.path, s, s + entry.path.bodyLen, LINE_W * 2.6, 1.4, 0.003, 0);
       entry.shadow.geometry.setAttribute('position', new THREE.BufferAttribute(sp, 3));
       entry.shadow.geometry.computeBoundingSphere();
     }
@@ -722,7 +745,7 @@ export class GameScene {
     this.tween(dur, (t) => {
       this.setShift(e, easeInQuad(t) * travel);
       e.mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-      e.shadowMat.opacity = 0.1 * (1 - t);
+      e.shadowMat.opacity = 0.13 * (1 - t);
     }, () => {
       this.world.remove(e.mesh, e.shadow);
       e.mesh.geometry.dispose();

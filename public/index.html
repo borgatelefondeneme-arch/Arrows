@@ -28,21 +28,39 @@
     <!-- Ana menü -->
     <section id="screen-home" class="screen active">
       <div id="home-stage" aria-hidden="true"></div>
-      <div class="home-top">
-        <h1>Ok Küp</h1>
+      <div class="vignette" aria-hidden="true"></div>
+      <header class="topbar">
+        <div class="level-badge" aria-label="Bölüm">
+          <svg class="badge-ring" viewBox="0 0 48 48"><circle cx="24" cy="24" r="21" /></svg>
+          <span id="home-level">1</span>
+        </div>
+        <div class="chips">
+          <div class="chip"><svg viewBox="0 0 24 24" class="i-star"><path d="M12 2.8l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 16.8l-5.4 2.9 1-6.1L3.2 9.3l6.1-.9z" /></svg><span id="home-stars">0</span></div>
+          <div class="chip"><svg viewBox="0 0 24 24" class="i-gem"><path d="M6 3h12l4 6-10 12L2 9z" /><path d="M2 9h20M9 3l3 18M15 3l-3 18" /></svg><span id="home-score">0</span></div>
+          <button class="round-btn" id="btn-sound" aria-label="Ses"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" /><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /></svg></button>
+          <button class="round-btn" id="btn-howto" aria-label="Nasıl oynanır?"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6M12 17h.01" /></svg></button>
+        </div>
+      </header>
+      <div class="brand">
+        <h1 class="wordmark"><span>OK</span><span>KÜP</span></h1>
         <p class="tagline">Okları doğru sırayla çek, sıkışan dostunu kurtar.</p>
       </div>
-      <div class="menu">
-        <dl class="stats-row">
-            <div class="stat"><dt>Bölüm</dt><dd id="home-level">1</dd></div>
-            <div class="stat"><dt>Yıldız</dt><dd id="home-stars">0</dd></div>
-            <div class="stat"><dt>Puan</dt><dd id="home-score">0</dd></div>
-          </dl>
-        <button class="btn big primary" id="btn-play">Oyna <span class="btn-sub" id="play-sub">Bölüm 1</span></button>
-        <button class="btn big vs" id="btn-friends">Arkadaşlar &amp; VS</button>
-        <button class="btn small ghost" id="btn-howto">Nasıl oynanır?</button>
+      <div class="next-card">
+        <div class="next-head">
+          <div>
+            <p class="eyebrow">Sıradaki bölüm</p>
+            <h2 class="next-title"><span id="play-sub">Bölüm 1</span> <span class="next-name" id="next-name">Küp</span></h2>
+            <p class="next-meta" id="next-meta">8 × 8 × 8 · 384 nokta</p>
+          </div>
+          <div class="difficulty" aria-label="Zorluk">
+            <span class="eyebrow">Zorluk</span>
+            <div class="pips" id="next-diff"><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <button class="play-btn" id="btn-play"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></svg>Oyna</button>
+        <button class="btn ghost-light" id="btn-friends">Arkadaşlar &amp; VS</button>
+        <div class="conn" id="conn-status"><span class="dot"></span><span class="txt">Bağlanıyor…</span></div>
       </div>
-      <div class="conn" id="conn-status"><span class="dot"></span><span class="txt">Bağlanıyor…</span></div>
     </section>
 
     <!-- Bölüm seçimi -->
@@ -84,28 +102,33 @@
     <!-- Oyun -->
     <section id="screen-game" class="screen">
       <div id="stage"></div>
+      <div class="vignette" aria-hidden="true"></div>
       <div class="hud top">
-        <button class="icon-btn" id="btn-quit">✕</button>
+        <button class="round-btn glass" id="btn-quit" aria-label="Çık"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         <div class="hud-center">
           <div class="hud-level" id="hud-level">Bölüm 1</div>
           <div class="hud-timer" id="hud-timer">0:00.0</div>
         </div>
-        <div class="hud-arrows"><span id="hud-remaining">0</span><small id="hud-unit">ok</small></div>
+        <div class="hud-arrows glass">
+          <svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>
+          <div><span id="hud-remaining">0</span><small id="hud-unit">engel</small></div>
+        </div>
       </div>
+      <div class="hud-progress" aria-hidden="true"><div class="track"><div class="fill" id="hud-progress"></div></div><span class="label">Kaçış yolu</span></div>
       <div class="vs-bar" id="vs-bar" hidden>
         <div class="vs-row"><span class="vs-name">Sen</span><div class="progress"><div id="vs-me" class="fill me"></div></div></div>
         <div class="vs-row"><span class="vs-name" id="vs-opp-name">Rakip</span><div class="progress"><div id="vs-opp" class="fill opp"></div></div></div>
       </div>
       <div class="hud bottom">
-        <button class="icon-btn" id="btn-reset-view" aria-label="Görünümü sıfırla">
-          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6" /><path d="M4 4v4h4" /></svg>
+        <button class="tool-btn" id="btn-reset-view" aria-label="Görünümü sıfırla">
+          <span class="round-btn glass"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6" /><path d="M4 4v4h4" /></svg></span><small>Sıfırla</small>
         </button>
-        <button class="icon-btn" id="btn-hint" aria-label="İpucu">
-          <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.3 1.1 2.2h5c0-.9.5-1.7 1.1-2.2A6 6 0 0 0 12 3z" /></svg>
+        <button class="tool-btn" id="btn-hint" aria-label="İpucu">
+          <span class="round-btn glass"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.3 1.1 2.2h5c0-.9.5-1.7 1.1-2.2A6 6 0 0 0 12 3z" /></svg></span><small>İpucu</small>
         </button>
       </div>
       <div class="result-strip" id="result-strip" hidden></div>
-      <button class="btn primary next-btn" id="btn-next" hidden>Sonraki bölüm <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" /></svg></button>
+      <button class="play-btn next-btn" id="btn-next" hidden>Sonraki bölüm <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" /></svg></button>
       <div class="stun" id="stun" hidden>Çarptı</div>
       <div class="tutorial" id="tutorial" hidden><div class="ring"></div><div class="tip">Oka dokun</div></div>
       <div class="countdown" id="countdown" hidden></div>
